@@ -1,0 +1,9 @@
+{
+  "name": "Bribe The Band",
+  "short_name": "Bribe The Band",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#12141c",
+  "theme_color": "#12141c",
+  "icons": []
+}
