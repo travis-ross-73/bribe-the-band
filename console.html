@@ -289,6 +289,18 @@
       <div id="setlist-list"></div>
     </section>
 
+    <section>
+      <h2>Add a Song</h2>
+      <div class="section-sub">Upload the chart PDF to Wasabi yourself first (same as before), then paste its public URL here along with the song info. This adds it to your catalog so it shows up in the setlist builder and on the crowd page.</div>
+      <input type="text" id="new-song-title" placeholder="Song title" />
+      <input type="text" id="new-song-artist" placeholder="Artist" />
+      <input type="text" id="new-song-key" placeholder="Key, e.g. 'G'" />
+      <input type="text" id="new-song-capo" placeholder="Key with capo (optional), e.g. 'Capo 3 (play D shapes)'" />
+      <input type="text" id="new-song-url" placeholder="Chart PDF URL (from Wasabi)" />
+      <button class="primary" id="add-song-btn">Add Song</button>
+      <div class="error-msg" id="add-song-error"></div>
+    </section>
+
   </main>
 </div>
 
@@ -332,6 +344,14 @@
   const saveAsNewBtn = document.getElementById('save-as-new-btn');
   const clearBuilderBtn = document.getElementById('clear-builder-btn');
   const setlistListEl = document.getElementById('setlist-list');
+
+  const newSongTitle = document.getElementById('new-song-title');
+  const newSongArtist = document.getElementById('new-song-artist');
+  const newSongKey = document.getElementById('new-song-key');
+  const newSongCapo = document.getElementById('new-song-capo');
+  const newSongUrl = document.getElementById('new-song-url');
+  const addSongBtn = document.getElementById('add-song-btn');
+  const addSongError = document.getElementById('add-song-error');
 
   // ---------------- Auth ----------------
   loginBtn.addEventListener('click', async () => {
@@ -749,6 +769,58 @@
   }
   saveSetlistBtn.addEventListener('click', () => doSaveSetlist(false));
   saveAsNewBtn.addEventListener('click', () => doSaveSetlist(true));
+
+  // ---------------- Actions: add a song to the catalog ----------------
+  function slugify(title) {
+    return title.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'song';
+  }
+
+  function uniqueSlug(baseSlug) {
+    const existingIds = new Set(songs.map(s => s.id));
+    if (!existingIds.has(baseSlug)) return baseSlug;
+    let i = 2;
+    while (existingIds.has(`${baseSlug}-${i}`)) i++;
+    return `${baseSlug}-${i}`;
+  }
+
+  addSongBtn.addEventListener('click', async () => {
+    addSongError.textContent = '';
+    const title = newSongTitle.value.trim();
+    const artist = newSongArtist.value.trim();
+    const key = newSongKey.value.trim();
+    const capo = newSongCapo.value.trim();
+    const chartUrl = newSongUrl.value.trim();
+
+    if (!title || !artist || !chartUrl) {
+      addSongError.textContent = 'Title, artist, and chart PDF URL are required.';
+      return;
+    }
+
+    const id = uniqueSlug(slugify(title));
+
+    const { error } = await supabase.from('songs').insert({
+      id,
+      performer_id: performer.id,
+      title,
+      artist,
+      song_key: key || null,
+      key_with_capo: capo || null,
+      chart_url: chartUrl
+    });
+    if (error) {
+      addSongError.textContent = 'Could not add song: ' + error.message;
+      return;
+    }
+
+    newSongTitle.value = '';
+    newSongArtist.value = '';
+    newSongKey.value = '';
+    newSongCapo.value = '';
+    newSongUrl.value = '';
+
+    await loadSongs();
+    renderBuilder();
+  });
 
   // ---------------- Actions: gig control ----------------
   startGigBtn.addEventListener('click', async () => {
