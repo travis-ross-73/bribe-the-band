@@ -52,6 +52,29 @@
     font-size: 0.9rem;
     text-align: center;
   }
+  #tip-only-card {
+    background: linear-gradient(135deg, #2a2415, var(--card));
+    border: 1px solid var(--accent-dark);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 18px;
+    text-align: center;
+  }
+  #tip-only-card p {
+    margin: 0 0 10px;
+    font-size: 0.92rem;
+    color: var(--text);
+  }
+  #tip-only-btn {
+    background: var(--accent);
+    color: #12141c;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 18px;
+    font-weight: 700;
+    font-size: 0.95rem;
+    cursor: pointer;
+  }
   #search {
     width: 100%;
     padding: 12px 14px;
@@ -83,14 +106,7 @@
   .song-row.selected { border-color: var(--accent); background: #232741; }
   .song-title { font-weight: 600; font-size: 1rem; }
   .song-artist { color: var(--muted); font-size: 0.85rem; margin-top: 2px; }
-  .song-key {
-    font-size: 0.78rem;
-    color: var(--accent);
-    border: 1px solid var(--accent-dark);
-    border-radius: 6px;
-    padding: 2px 8px;
-    white-space: nowrap;
-  }
+  .req-arrow { color: var(--accent); font-size: 1.3rem; font-weight: 700; }
 
   #request-panel {
     position: fixed;
@@ -109,9 +125,11 @@
     display: flex;
     gap: 8px;
     margin-bottom: 12px;
+    flex-wrap: wrap;
   }
   .tip-btn {
     flex: 1;
+    min-width: 60px;
     padding: 10px 0;
     border-radius: 8px;
     border: 1px solid #2a2e40;
@@ -121,6 +139,18 @@
     cursor: pointer;
   }
   .tip-btn.selected { background: var(--accent); color: #12141c; border-color: var(--accent); font-weight: 700; }
+  #custom-tip-wrap {
+    margin-bottom: 12px;
+  }
+  #custom-tip-input {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--accent);
+    background: #12141c;
+    color: var(--text);
+    font-size: 0.95rem;
+  }
   #note-input {
     width: 100%;
     padding: 10px 12px;
@@ -129,7 +159,7 @@
     background: #12141c;
     color: var(--text);
     font-size: 0.95rem;
-    margin-bottom: 14px;
+    margin-bottom: 6px;
   }
   #submit-request {
     width: 100%;
@@ -141,6 +171,7 @@
     font-weight: 700;
     font-size: 1.05rem;
     cursor: pointer;
+    margin-top: 8px;
   }
   #submit-request:disabled { opacity: 0.5; cursor: default; }
   #cancel-request {
@@ -153,11 +184,12 @@
   }
   #confirmation {
     text-align: center;
-    padding: 40px 20px;
+    padding: 60px 20px;
   }
   #confirmation h2 { color: var(--success); }
+  #confirmation .countdown { color: var(--muted); font-size: 0.9rem; margin-top: 18px; }
   .hidden { display: none !important; }
-  .note-hint { color: var(--muted); font-size: 0.75rem; margin: -8px 0 12px; }
+  .note-hint { color: var(--muted); font-size: 0.75rem; margin: 0 0 12px; }
 </style>
 </head>
 <body>
@@ -169,6 +201,12 @@
 
 <main>
   <div id="status-banner">Loading songs…</div>
+
+  <div id="tip-only-card">
+    <p>Like what you've heard so far? Leave a tip without a request!</p>
+    <button id="tip-only-btn">Leave a Tip</button>
+  </div>
+
   <input type="text" id="search" placeholder="Search songs or artists…" />
   <div class="song-list" id="song-list"></div>
 </main>
@@ -178,22 +216,28 @@
   <div class="subtitle" id="panel-song-artist">Artist</div>
 
   <div class="tip-options" id="tip-options">
+    <button class="tip-btn" data-amount="2">$2</button>
     <button class="tip-btn" data-amount="5">$5</button>
     <button class="tip-btn" data-amount="10">$10</button>
-    <button class="tip-btn" data-amount="20">$20</button>
-    <button class="tip-btn" data-amount="0">No tip</button>
+    <button class="tip-btn" data-amount="custom">Custom</button>
+    <button class="tip-btn" data-amount="0">No Tip</button>
   </div>
 
-  <input type="text" id="note-input" placeholder="Add a note (optional) — no names, please" maxlength="120" />
-  <div class="note-hint">Notes are shown to the performer — please don't include names.</div>
+  <div id="custom-tip-wrap" class="hidden">
+    <input type="number" min="1" step="1" id="custom-tip-input" placeholder="$ amount" />
+  </div>
+
+  <input type="text" id="note-input" placeholder='e.g. &quot;For Sarah&quot; or &quot;Happy Birthday to Eric!&quot;' maxlength="120" />
+  <div class="note-hint">Add a note (optional) — dedicate it to someone, request an occasion, whatever you'd like.</div>
 
   <button id="submit-request">Send Request</button>
   <div id="cancel-request">Cancel</div>
 </div>
 
 <div id="confirmation" class="hidden">
-  <h2>Request sent! 🎶</h2>
-  <p>The band has your request — thanks for the tip!</p>
+  <h2 id="confirmation-title">Request sent! 🎶</h2>
+  <p id="confirmation-subtitle">The band has your request — thanks for the tip!</p>
+  <div class="countdown" id="countdown-text"></div>
 </div>
 
 <script type="module">
@@ -212,20 +256,29 @@
   // --- State ------------------------------------------------------------
   let songs = [];
   let gigSession = null;
-  let selectedSong = null;
-  let selectedTip = null;
+  let selectedSong = null; // null when this is a tip-only request
+  let selectedTip = null;  // number, or 'custom'
+  let isTipOnly = false;
 
   const statusBanner = document.getElementById('status-banner');
+  const tipOnlyCard = document.getElementById('tip-only-card');
+  const tipOnlyBtn = document.getElementById('tip-only-btn');
   const songListEl = document.getElementById('song-list');
   const searchEl = document.getElementById('search');
   const panel = document.getElementById('request-panel');
   const panelTitle = document.getElementById('panel-song-title');
   const panelArtist = document.getElementById('panel-song-artist');
   const tipOptions = document.getElementById('tip-options');
+  const customTipWrap = document.getElementById('custom-tip-wrap');
+  const customTipInput = document.getElementById('custom-tip-input');
   const noteInput = document.getElementById('note-input');
   const submitBtn = document.getElementById('submit-request');
   const cancelBtn = document.getElementById('cancel-request');
   const confirmation = document.getElementById('confirmation');
+  const confirmationTitle = document.getElementById('confirmation-title');
+  const confirmationSubtitle = document.getElementById('confirmation-subtitle');
+  const countdownText = document.getElementById('countdown-text');
+  const mainEl = document.querySelector('main');
 
   async function init() {
     // Look up the active gig session by its code
@@ -238,6 +291,7 @@
 
     if (gigError || !gigData) {
       statusBanner.textContent = `No active gig found for code "${gigCode}". Ask the performer for the right link.`;
+      tipOnlyCard.classList.add('hidden');
       return;
     }
     gigSession = gigData;
@@ -273,7 +327,7 @@
           <div class="song-title">${escapeHtml(song.title)}</div>
           <div class="song-artist">${escapeHtml(song.artist)}</div>
         </div>
-        <div class="song-key">${escapeHtml(song.song_key || '')}</div>
+        <div class="req-arrow">+</div>
       `;
       row.addEventListener('click', () => openRequestPanel(song));
       songListEl.appendChild(row);
@@ -294,39 +348,76 @@
     renderSongs(filtered);
   });
 
-  function openRequestPanel(song) {
-    selectedSong = song;
+  function resetPanelState() {
     selectedTip = null;
-    panelTitle.textContent = song.title;
-    panelArtist.textContent = song.artist;
     noteInput.value = '';
+    customTipInput.value = '';
+    customTipWrap.classList.add('hidden');
     [...tipOptions.children].forEach(btn => btn.classList.remove('selected'));
     submitBtn.disabled = true;
+    submitBtn.textContent = 'Send Request';
+  }
+
+  function openRequestPanel(song) {
+    selectedSong = song;
+    isTipOnly = false;
+    panelTitle.textContent = song.title;
+    panelArtist.textContent = song.artist;
+    resetPanelState();
     panel.classList.add('open');
   }
+
+  tipOnlyBtn.addEventListener('click', () => {
+    selectedSong = null;
+    isTipOnly = true;
+    panelTitle.textContent = 'Leave a Tip';
+    panelArtist.textContent = "No request — just showing some love";
+    resetPanelState();
+    panel.classList.add('open');
+  });
 
   tipOptions.addEventListener('click', (e) => {
     const btn = e.target.closest('.tip-btn');
     if (!btn) return;
     [...tipOptions.children].forEach(b => b.classList.remove('selected'));
     btn.classList.add('selected');
-    selectedTip = parseFloat(btn.dataset.amount);
-    submitBtn.disabled = false;
+
+    if (btn.dataset.amount === 'custom') {
+      selectedTip = 'custom';
+      customTipWrap.classList.remove('hidden');
+      customTipInput.focus();
+      submitBtn.disabled = !(parseFloat(customTipInput.value) > 0);
+    } else {
+      selectedTip = parseFloat(btn.dataset.amount);
+      customTipWrap.classList.add('hidden');
+      submitBtn.disabled = false;
+    }
+  });
+
+  customTipInput.addEventListener('input', () => {
+    submitBtn.disabled = !(parseFloat(customTipInput.value) > 0);
   });
 
   cancelBtn.addEventListener('click', () => {
     panel.classList.remove('open');
   });
 
+  function currentTipAmount() {
+    if (selectedTip === 'custom') return parseFloat(customTipInput.value) || 0;
+    return selectedTip || 0;
+  }
+
   submitBtn.addEventListener('click', async () => {
-    if (!selectedSong || selectedTip === null || !gigSession) return;
+    if (selectedTip === null || !gigSession) return;
+    if (selectedTip === 'custom' && !(parseFloat(customTipInput.value) > 0)) return;
+
     submitBtn.disabled = true;
     submitBtn.textContent = 'Sending…';
 
     const { error } = await supabase.from('requests').insert({
       gig_session_id: gigSession.id,
-      song_id: selectedSong.id,
-      tip_amount: selectedTip,
+      song_id: selectedSong ? selectedSong.id : null,
+      tip_amount: currentTipAmount(),
       note: noteInput.value.trim() || null,
       status: 'pending'
     });
@@ -340,9 +431,35 @@
     }
 
     panel.classList.remove('open');
-    document.querySelector('main').classList.add('hidden');
-    confirmation.classList.remove('hidden');
+    showConfirmation();
   });
+
+  function showConfirmation() {
+    if (isTipOnly) {
+      confirmationTitle.textContent = 'Tip sent! 🎶';
+      confirmationSubtitle.textContent = 'Thanks so much for the support!';
+    } else {
+      confirmationTitle.textContent = 'Request sent! 🎶';
+      confirmationSubtitle.textContent = 'The band has your request — thanks!';
+    }
+    mainEl.classList.add('hidden');
+    tipOnlyCard.classList.add('hidden');
+    confirmation.classList.remove('hidden');
+
+    let secondsLeft = 5;
+    countdownText.textContent = `Returning to the song list in ${secondsLeft}…`;
+    const interval = setInterval(() => {
+      secondsLeft -= 1;
+      if (secondsLeft <= 0) {
+        clearInterval(interval);
+        confirmation.classList.add('hidden');
+        mainEl.classList.remove('hidden');
+        tipOnlyCard.classList.remove('hidden');
+      } else {
+        countdownText.textContent = `Returning to the song list in ${secondsLeft}…`;
+      }
+    }, 1000);
+  }
 
   init();
 </script>
