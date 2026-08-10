@@ -382,7 +382,7 @@
   async function loadSongs() {
     const { data } = await supabase
       .from('songs')
-      .select('id, title, artist')
+      .select('id, title, artist, chart_url')
       .eq('performer_id', performer.id)
       .order('title');
     songs = data || [];
