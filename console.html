@@ -41,7 +41,7 @@
     font-size: 0.85rem;
   }
   main {
-    max-width: 720px;
+    max-width: 780px;
     margin: 0 auto;
     padding: 20px 16px 60px;
   }
@@ -91,44 +91,81 @@
     font-size: 0.85rem;
     cursor: pointer;
   }
+  button.tiny {
+    background: transparent;
+    border: 1px solid #2a2e40;
+    color: var(--text);
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-size: 0.78rem;
+    cursor: pointer;
+    line-height: 1;
+  }
+  button.tiny:disabled { opacity: 0.3; cursor: default; }
+  button.tiny.danger { border-color: var(--danger); color: var(--danger); }
   .error-msg { color: var(--danger); font-size: 0.85rem; margin-top: 8px; }
+  .button-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+  .button-row button { flex: 1; min-width: 120px; }
 
   /* Login */
   #login-view { max-width: 360px; margin: 80px auto; padding: 0 16px; }
   #login-view h1 { text-align: center; margin-bottom: 24px; }
 
-  /* Song checklist */
-  .song-check-list {
-    max-height: 340px;
+  /* Build-a-setlist: two columns */
+  .builder-columns {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+  .builder-col {
+    flex: 1;
+    min-width: 260px;
+  }
+  .builder-col-label {
+    font-size: 0.78rem;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  .song-scroll-list {
+    max-height: 320px;
     overflow-y: auto;
     border: 1px solid #2a2e40;
     border-radius: 8px;
-    margin-bottom: 12px;
   }
-  .song-check-row {
+  .song-row-item {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 9px 12px;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 10px;
     border-bottom: 1px solid #232741;
-    font-size: 0.9rem;
+    font-size: 0.88rem;
   }
-  .song-check-row:last-child { border-bottom: none; }
-  .song-check-row input { width: auto; margin: 0; }
-  .song-check-row .artist { color: var(--muted); font-size: 0.8rem; }
+  .song-row-item:last-child { border-bottom: none; }
+  .song-row-item .artist { color: var(--muted); font-size: 0.78rem; }
+  .song-row-item .order-num {
+    color: var(--accent);
+    font-weight: 700;
+    font-size: 0.8rem;
+    width: 20px;
+    flex-shrink: 0;
+  }
+  .song-row-item .row-actions { display: flex; gap: 4px; flex-shrink: 0; }
+  .empty-note { color: var(--muted); font-size: 0.85rem; text-align: center; padding: 14px; }
 
   /* Saved setlists */
   .setlist-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px 0;
+    padding: 12px 0;
     border-bottom: 1px solid #232741;
     font-size: 0.9rem;
   }
   .setlist-row:last-child { border-bottom: none; }
+  .setlist-row-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
   .setlist-name { font-weight: 600; }
   .setlist-count { color: var(--muted); font-size: 0.8rem; }
+  .setlist-export-note { color: var(--muted); font-size: 0.75rem; margin-top: 4px; }
 
   /* Active gig status */
   #active-gig-status {
@@ -162,7 +199,6 @@
     font-size: 0.78rem;
     padding: 6px 10px;
   }
-  .empty-note { color: var(--muted); font-size: 0.88rem; text-align: center; padding: 16px; }
 
   #start-set-btn {
     width: 100%;
@@ -175,6 +211,15 @@
     font-size: 1rem;
     cursor: not-allowed;
     margin-top: 4px;
+  }
+  #editing-banner {
+    background: #2a2414;
+    border: 1px solid var(--accent-dark);
+    color: var(--accent);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 0.82rem;
+    margin-bottom: 10px;
   }
   .hidden { display: none !important; }
 </style>
@@ -214,10 +259,29 @@
 
     <section>
       <h2>Build a Setlist</h2>
-      <div class="section-sub">Check the songs for tonight, name it, and save. Saved setlists show up in the picker above.</div>
+      <div class="section-sub">Search and add songs on the left. They land in order on the right — use the arrows to rearrange.</div>
+
+      <div id="editing-banner" class="hidden"></div>
+
       <input type="text" id="new-setlist-name" placeholder="Setlist name, e.g. '2-Hour Set'" />
-      <div class="song-check-list" id="song-check-list"></div>
-      <button class="primary" id="save-setlist-btn">Save Setlist</button>
+      <input type="text" id="song-search" placeholder="Search songs or artists…" />
+
+      <div class="builder-columns">
+        <div class="builder-col">
+          <div class="builder-col-label">Available Songs</div>
+          <div class="song-scroll-list" id="available-list"></div>
+        </div>
+        <div class="builder-col">
+          <div class="builder-col-label">In This Set</div>
+          <div class="song-scroll-list" id="selected-list"></div>
+        </div>
+      </div>
+
+      <div class="button-row">
+        <button class="primary" id="save-setlist-btn">Save Setlist</button>
+        <button class="secondary hidden" id="save-as-new-btn">Save as New</button>
+        <button class="secondary" id="clear-builder-btn">Clear / Start New</button>
+      </div>
     </section>
 
     <section>
@@ -230,6 +294,8 @@
 
 <script type="module">
   import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+  import { PDFDocument } from 'https://esm.sh/pdf-lib@1.17.1';
+  import JSZip from 'https://esm.sh/jszip@3.10.1';
 
   const SUPABASE_URL = 'https://ykvpjeiakvgihpxektcf.supabase.co';
   const SUPABASE_ANON_KEY = 'sb_publishable_g4w52upNnalAllmn8_8vRA_G6Hj-tlM';
@@ -239,6 +305,10 @@
   let songs = [];
   let setlists = [];
   let activeGig = null;
+
+  // Setlist builder state
+  let builderSongIds = [];   // ordered array of song ids currently in the set-in-progress
+  let editingSetlistId = null; // null = building a brand-new setlist; else = editing an existing one
 
   const loginView = document.getElementById('login-view');
   const consoleView = document.getElementById('console-view');
@@ -252,9 +322,15 @@
   const setlistPicker = document.getElementById('setlist-picker');
   const startGigBtn = document.getElementById('start-gig-btn');
   const requestListEl = document.getElementById('request-list');
+
+  const editingBanner = document.getElementById('editing-banner');
   const newSetlistName = document.getElementById('new-setlist-name');
-  const songCheckList = document.getElementById('song-check-list');
+  const songSearch = document.getElementById('song-search');
+  const availableListEl = document.getElementById('available-list');
+  const selectedListEl = document.getElementById('selected-list');
   const saveSetlistBtn = document.getElementById('save-setlist-btn');
+  const saveAsNewBtn = document.getElementById('save-as-new-btn');
+  const clearBuilderBtn = document.getElementById('clear-builder-btn');
   const setlistListEl = document.getElementById('setlist-list');
 
   // ---------------- Auth ----------------
@@ -297,7 +373,7 @@
     consoleView.classList.remove('hidden');
 
     await Promise.all([loadSongs(), loadSetlists(), loadActiveGig()]);
-    renderSongChecklist();
+    renderBuilder();
     renderSetlists();
     await renderRequests();
   }
@@ -333,7 +409,7 @@
     renderActiveGigStatus();
   }
 
-  // ---------------- Rendering ----------------
+  // ---------------- Rendering: gig status ----------------
   function renderActiveGigStatus() {
     if (activeGig) {
       const setlist = setlists.find(s => s.id === activeGig.active_setlist_id);
@@ -345,18 +421,128 @@
     }
   }
 
-  function renderSongChecklist() {
-    songCheckList.innerHTML = songs.map(s => `
-      <label class="song-check-row">
-        <input type="checkbox" value="${s.id}" />
+  // ---------------- Rendering: setlist builder (search + ordered set) ----------------
+  function renderBuilder() {
+    renderAvailableList();
+    renderSelectedList();
+    if (editingSetlistId) {
+      const s = setlists.find(x => x.id === editingSetlistId);
+      editingBanner.classList.remove('hidden');
+      editingBanner.textContent = `Editing "${s ? s.name : ''}" — Save updates it in place, or Save as New to keep the original and create a copy.`;
+      saveAsNewBtn.classList.remove('hidden');
+      saveSetlistBtn.textContent = 'Save Changes';
+    } else {
+      editingBanner.classList.add('hidden');
+      saveAsNewBtn.classList.add('hidden');
+      saveSetlistBtn.textContent = 'Save Setlist';
+    }
+  }
+
+  function renderAvailableList() {
+    const q = songSearch.value.trim().toLowerCase();
+    const available = songs.filter(s => !builderSongIds.includes(s.id));
+    const filtered = q
+      ? available.filter(s => s.title.toLowerCase().includes(q) || s.artist.toLowerCase().includes(q))
+      : available;
+
+    if (filtered.length === 0) {
+      availableListEl.innerHTML = '<div class="empty-note">No matching songs.</div>';
+      return;
+    }
+    availableListEl.innerHTML = filtered.map(s => `
+      <div class="song-row-item">
         <span>
           <div>${escapeHtml(s.title)}</div>
           <div class="artist">${escapeHtml(s.artist)}</div>
         </span>
-      </label>
+        <div class="row-actions">
+          <button class="tiny" data-add="${s.id}">+ Add</button>
+        </div>
+      </div>
     `).join('');
+    availableListEl.querySelectorAll('[data-add]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        builderSongIds.push(btn.getAttribute('data-add'));
+        renderBuilder();
+      });
+    });
   }
 
+  function renderSelectedList() {
+    if (builderSongIds.length === 0) {
+      selectedListEl.innerHTML = '<div class="empty-note">No songs added yet — add some from the left.</div>';
+      return;
+    }
+    selectedListEl.innerHTML = builderSongIds.map((id, i) => {
+      const s = songs.find(x => x.id === id);
+      const title = s ? s.title : '(unknown song)';
+      const artist = s ? s.artist : '';
+      return `
+        <div class="song-row-item">
+          <span class="order-num">${i + 1}.</span>
+          <span style="flex:1;">
+            <div>${escapeHtml(title)}</div>
+            <div class="artist">${escapeHtml(artist)}</div>
+          </span>
+          <div class="row-actions">
+            <button class="tiny" data-up="${id}" ${i === 0 ? 'disabled' : ''}>↑</button>
+            <button class="tiny" data-down="${id}" ${i === builderSongIds.length - 1 ? 'disabled' : ''}>↓</button>
+            <button class="tiny danger" data-remove="${id}">✕</button>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    selectedListEl.querySelectorAll('[data-up]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-up');
+        const i = builderSongIds.indexOf(id);
+        if (i > 0) {
+          [builderSongIds[i - 1], builderSongIds[i]] = [builderSongIds[i], builderSongIds[i - 1]];
+          renderSelectedList();
+        }
+      });
+    });
+    selectedListEl.querySelectorAll('[data-down]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-down');
+        const i = builderSongIds.indexOf(id);
+        if (i < builderSongIds.length - 1) {
+          [builderSongIds[i + 1], builderSongIds[i]] = [builderSongIds[i], builderSongIds[i + 1]];
+          renderSelectedList();
+        }
+      });
+    });
+    selectedListEl.querySelectorAll('[data-remove]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-remove');
+        builderSongIds = builderSongIds.filter(x => x !== id);
+        renderBuilder();
+      });
+    });
+  }
+
+  songSearch.addEventListener('input', renderAvailableList);
+
+  function loadSetlistIntoBuilder(setlist) {
+    editingSetlistId = setlist.id;
+    builderSongIds = [...setlist.song_ids];
+    newSetlistName.value = setlist.name;
+    songSearch.value = '';
+    renderBuilder();
+    window.scrollTo({ top: document.querySelector('main').offsetTop, behavior: 'smooth' });
+  }
+
+  function clearBuilder() {
+    editingSetlistId = null;
+    builderSongIds = [];
+    newSetlistName.value = '';
+    songSearch.value = '';
+    renderBuilder();
+  }
+  clearBuilderBtn.addEventListener('click', clearBuilder);
+
+  // ---------------- Rendering: saved setlists ----------------
   function renderSetlists() {
     setlistPicker.innerHTML = setlists.length
       ? setlists.map(s => `<option value="${s.id}">${escapeHtml(s.name)} (${s.song_ids.length} songs)</option>`).join('')
@@ -365,15 +551,115 @@
     setlistListEl.innerHTML = setlists.length
       ? setlists.map(s => `
           <div class="setlist-row">
-            <div>
-              <div class="setlist-name">${escapeHtml(s.name)}</div>
-              <div class="setlist-count">${s.song_ids.length} songs</div>
+            <div class="setlist-row-top">
+              <div>
+                <div class="setlist-name">${escapeHtml(s.name)}</div>
+                <div class="setlist-count">${s.song_ids.length} songs</div>
+              </div>
+              <button class="secondary" data-edit="${s.id}">Edit</button>
             </div>
+            <div class="button-row">
+              <button class="tiny" data-export-pdf="${s.id}">Export PDF</button>
+              <button class="tiny" data-export-zip="${s.id}">Export ZIP</button>
+              <button class="tiny" data-export-txt="${s.id}">Export Text</button>
+            </div>
+            <div class="setlist-export-note" data-export-status="${s.id}"></div>
           </div>
         `).join('')
       : '<div class="empty-note">No saved setlists yet.</div>';
+
+    setlistListEl.querySelectorAll('[data-edit]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const s = setlists.find(x => x.id === btn.getAttribute('data-edit'));
+        if (s) loadSetlistIntoBuilder(s);
+      });
+    });
+    setlistListEl.querySelectorAll('[data-export-pdf]').forEach(btn => {
+      btn.addEventListener('click', () => exportSetlist(btn.getAttribute('data-export-pdf'), 'pdf'));
+    });
+    setlistListEl.querySelectorAll('[data-export-zip]').forEach(btn => {
+      btn.addEventListener('click', () => exportSetlist(btn.getAttribute('data-export-zip'), 'zip'));
+    });
+    setlistListEl.querySelectorAll('[data-export-txt]').forEach(btn => {
+      btn.addEventListener('click', () => exportSetlist(btn.getAttribute('data-export-txt'), 'txt'));
+    });
   }
 
+  // ---------------- Export ----------------
+  function setExportStatus(setlistId, text) {
+    const el = setlistListEl.querySelector(`[data-export-status="${setlistId}"]`);
+    if (el) el.textContent = text;
+  }
+
+  function downloadBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function safeFilename(name) {
+    return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'setlist';
+  }
+
+  async function exportSetlist(setlistId, format) {
+    const setlist = setlists.find(s => s.id === setlistId);
+    if (!setlist) return;
+    const orderedSongs = setlist.song_ids
+      .map(id => songs.find(s => s.id === id))
+      .filter(Boolean);
+
+    if (orderedSongs.length === 0) {
+      setExportStatus(setlistId, 'No songs in this setlist to export.');
+      return;
+    }
+
+    if (format === 'txt') {
+      const lines = orderedSongs.map((s, i) => `${i + 1}. ${s.title} — ${s.artist}`);
+      const blob = new Blob([lines.join('\n') + '\n'], { type: 'text/plain' });
+      downloadBlob(blob, `${safeFilename(setlist.name)}.txt`);
+      return;
+    }
+
+    setExportStatus(setlistId, `Fetching ${orderedSongs.length} charts…`);
+    try {
+      if (format === 'pdf') {
+        const mergedPdf = await PDFDocument.create();
+        for (const s of orderedSongs) {
+          const bytes = await fetch(s.chart_url).then(r => {
+            if (!r.ok) throw new Error(`Could not fetch chart for "${s.title}"`);
+            return r.arrayBuffer();
+          });
+          const donorPdf = await PDFDocument.load(bytes);
+          const copiedPages = await mergedPdf.copyPages(donorPdf, donorPdf.getPageIndices());
+          copiedPages.forEach(p => mergedPdf.addPage(p));
+        }
+        const mergedBytes = await mergedPdf.save();
+        downloadBlob(new Blob([mergedBytes], { type: 'application/pdf' }), `${safeFilename(setlist.name)}.pdf`);
+      } else if (format === 'zip') {
+        const zip = new JSZip();
+        for (const s of orderedSongs) {
+          const bytes = await fetch(s.chart_url).then(r => {
+            if (!r.ok) throw new Error(`Could not fetch chart for "${s.title}"`);
+            return r.arrayBuffer();
+          });
+          zip.file(`${s.id}.pdf`, bytes);
+        }
+        const blob = await zip.generateAsync({ type: 'blob' });
+        downloadBlob(blob, `${safeFilename(setlist.name)}.zip`);
+      }
+      setExportStatus(setlistId, '');
+    } catch (err) {
+      console.error('Export failed', err);
+      setExportStatus(setlistId, 'Export failed: ' + err.message);
+    }
+  }
+
+  // ---------------- Requests ----------------
   async function renderRequests() {
     if (!activeGig) {
       requestListEl.innerHTML = '<div class="empty-note">No active gig — start one above to see requests here.</div>';
@@ -426,26 +712,35 @@
     return div.innerHTML;
   }
 
-  // ---------------- Actions ----------------
-  saveSetlistBtn.addEventListener('click', async () => {
+  // ---------------- Actions: save setlist ----------------
+  async function doSaveSetlist(asNew) {
     const name = newSetlistName.value.trim();
     if (!name) { alert('Give the setlist a name first.'); return; }
-    const checked = [...songCheckList.querySelectorAll('input[type=checkbox]:checked')].map(cb => cb.value);
-    if (checked.length === 0) { alert('Check at least one song.'); return; }
+    if (builderSongIds.length === 0) { alert('Add at least one song.'); return; }
 
-    const { error } = await supabase.from('setlists').insert({
-      performer_id: performer.id,
-      name,
-      song_ids: checked
-    });
-    if (error) { alert('Could not save setlist: ' + error.message); return; }
+    if (editingSetlistId && !asNew) {
+      const { error } = await supabase
+        .from('setlists')
+        .update({ name, song_ids: builderSongIds })
+        .eq('id', editingSetlistId);
+      if (error) { alert('Could not update setlist: ' + error.message); return; }
+    } else {
+      const { error } = await supabase.from('setlists').insert({
+        performer_id: performer.id,
+        name,
+        song_ids: builderSongIds
+      });
+      if (error) { alert('Could not save setlist: ' + error.message); return; }
+    }
 
-    newSetlistName.value = '';
-    songCheckList.querySelectorAll('input[type=checkbox]:checked').forEach(cb => cb.checked = false);
+    clearBuilder();
     await loadSetlists();
     renderSetlists();
-  });
+  }
+  saveSetlistBtn.addEventListener('click', () => doSaveSetlist(false));
+  saveAsNewBtn.addEventListener('click', () => doSaveSetlist(true));
 
+  // ---------------- Actions: gig control ----------------
   startGigBtn.addEventListener('click', async () => {
     const setlistId = setlistPicker.value;
     if (!setlistId) { alert('Pick (or save) a setlist first.'); return; }
