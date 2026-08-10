@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Bribe The Band — Console</title>
+<style>
+  :root {
+    --bg: #12141c;
+    --card: #1b1e2b;
+    --accent: #f2b134;
+    --accent-dark: #d99a1f;
+    --text: #f4f4f6;
+    --muted: #9a9db0;
+    --success: #4caf7d;
+    --danger: #e0616b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+  header {
+    padding: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #2a2e40;
+  }
+  header h1 { margin: 0; font-size: 1.3rem; }
+  #logout-btn {
+    background: transparent;
+    border: 1px solid #2a2e40;
+    color: var(--muted);
+    padding: 8px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.85rem;
+  }
+  main {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 20px 16px 60px;
+  }
+  section {
+    background: var(--card);
+    border: 1px solid #2a2e40;
+    border-radius: 12px;
+    padding: 18px 20px;
+    margin-bottom: 20px;
+  }
+  section h2 {
+    margin: 0 0 4px;
+    font-size: 1.05rem;
+  }
+  section .section-sub {
+    color: var(--muted);
+    font-size: 0.85rem;
+    margin-bottom: 14px;
+  }
+  input, select {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid #2a2e40;
+    background: #12141c;
+    color: var(--text);
+    font-size: 0.95rem;
+    margin-bottom: 10px;
+  }
+  button.primary {
+    background: var(--accent);
+    color: #12141c;
+    border: none;
+    border-radius: 8px;
+    padding: 11px 16px;
+    font-weight: 700;
+    font-size: 0.95rem;
+    cursor: pointer;
+  }
+  button.primary:disabled { opacity: 0.5; cursor: default; }
+  button.secondary {
+    background: transparent;
+    border: 1px solid #2a2e40;
+    color: var(--text);
+    border-radius: 8px;
+    padding: 9px 14px;
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+  .error-msg { color: var(--danger); font-size: 0.85rem; margin-top: 8px; }
+
+  /* Login */
+  #login-view { max-width: 360px; margin: 80px auto; padding: 0 16px; }
+  #login-view h1 { text-align: center; margin-bottom: 24px; }
+
+  /* Song checklist */
+  .song-check-list {
+    max-height: 340px;
+    overflow-y: auto;
+    border: 1px solid #2a2e40;
+    border-radius: 8px;
+    margin-bottom: 12px;
+  }
+  .song-check-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 12px;
+    border-bottom: 1px solid #232741;
+    font-size: 0.9rem;
+  }
+  .song-check-row:last-child { border-bottom: none; }
+  .song-check-row input { width: auto; margin: 0; }
+  .song-check-row .artist { color: var(--muted); font-size: 0.8rem; }
+
+  /* Saved setlists */
+  .setlist-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid #232741;
+    font-size: 0.9rem;
+  }
+  .setlist-row:last-child { border-bottom: none; }
+  .setlist-name { font-weight: 600; }
+  .setlist-count { color: var(--muted); font-size: 0.8rem; }
+
+  /* Active gig status */
+  #active-gig-status {
+    background: #232741;
+    border: 1px solid var(--accent-dark);
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-bottom: 14px;
+    font-size: 0.9rem;
+  }
+  #active-gig-status.none { border-color: #2a2e40; color: var(--muted); }
+
+  /* Request queue */
+  .request-row {
+    background: #12141c;
+    border: 1px solid #2a2e40;
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-bottom: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+  }
+  .request-info .title { font-weight: 600; }
+  .request-info .note { color: var(--muted); font-size: 0.85rem; margin-top: 2px; }
+  .request-tip { font-weight: 700; color: var(--accent); white-space: nowrap; }
+  .request-tip.zero { color: var(--muted); font-weight: 400; }
+  .request-actions { display: flex; gap: 6px; }
+  .request-actions button {
+    font-size: 0.78rem;
+    padding: 6px 10px;
+  }
+  .empty-note { color: var(--muted); font-size: 0.88rem; text-align: center; padding: 16px; }
+
+  #start-set-btn {
+    width: 100%;
+    background: #2a2e40;
+    color: var(--muted);
+    border: 1px dashed #3a3f55;
+    border-radius: 10px;
+    padding: 14px 0;
+    font-weight: 700;
+    font-size: 1rem;
+    cursor: not-allowed;
+    margin-top: 4px;
+  }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<div id="login-view">
+  <h1>🎤 Console Login</h1>
+  <input type="email" id="login-email" placeholder="Email" />
+  <input type="password" id="login-password" placeholder="Password" />
+  <button class="primary" id="login-btn" style="width:100%;">Log In</button>
+  <div class="error-msg" id="login-error"></div>
+</div>
+
+<div id="console-view" class="hidden">
+  <header>
+    <h1>🎤 Bribe The Band — Console</h1>
+    <button id="logout-btn">Log Out</button>
+  </header>
+
+  <main>
+
+    <section>
+      <h2>Tonight's Gig</h2>
+      <div class="section-sub">Start a new gig to make it live for the crowd page, or check what's currently active.</div>
+      <div id="active-gig-status" class="none">No active gig right now.</div>
+      <select id="setlist-picker"></select>
+      <button class="primary" id="start-gig-btn">Start New Gig With Selected Setlist</button>
+      <button id="start-set-btn" disabled>Start the Set (coming in Stage 2 — chart viewer)</button>
+    </section>
+
+    <section>
+      <h2>Incoming Requests</h2>
+      <div class="section-sub">Tip-ranked, highest first. "Accept" just clears it from this queue for now — full swipe/queue integration comes with the chart viewer in Stage 2.</div>
+      <div id="request-list"></div>
+    </section>
+
+    <section>
+      <h2>Build a Setlist</h2>
+      <div class="section-sub">Check the songs for tonight, name it, and save. Saved setlists show up in the picker above.</div>
+      <input type="text" id="new-setlist-name" placeholder="Setlist name, e.g. '2-Hour Set'" />
+      <div class="song-check-list" id="song-check-list"></div>
+      <button class="primary" id="save-setlist-btn">Save Setlist</button>
+    </section>
+
+    <section>
+      <h2>Saved Setlists</h2>
+      <div id="setlist-list"></div>
+    </section>
+
+  </main>
+</div>
+
+<script type="module">
+  import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+  const SUPABASE_URL = 'https://ykvpjeiakvgihpxektcf.supabase.co';
+  const SUPABASE_ANON_KEY = 'sb_publishable_g4w52upNnalAllmn8_8vRA_G6Hj-tlM';
+  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  let performer = null;
+  let songs = [];
+  let setlists = [];
+  let activeGig = null;
+
+  const loginView = document.getElementById('login-view');
+  const consoleView = document.getElementById('console-view');
+  const loginEmail = document.getElementById('login-email');
+  const loginPassword = document.getElementById('login-password');
+  const loginBtn = document.getElementById('login-btn');
+  const loginError = document.getElementById('login-error');
+  const logoutBtn = document.getElementById('logout-btn');
+
+  const activeGigStatus = document.getElementById('active-gig-status');
+  const setlistPicker = document.getElementById('setlist-picker');
+  const startGigBtn = document.getElementById('start-gig-btn');
+  const requestListEl = document.getElementById('request-list');
+  const newSetlistName = document.getElementById('new-setlist-name');
+  const songCheckList = document.getElementById('song-check-list');
+  const saveSetlistBtn = document.getElementById('save-setlist-btn');
+  const setlistListEl = document.getElementById('setlist-list');
+
+  // ---------------- Auth ----------------
+  loginBtn.addEventListener('click', async () => {
+    loginError.textContent = '';
+    const { error } = await supabase.auth.signInWithPassword({
+      email: loginEmail.value.trim(),
+      password: loginPassword.value
+    });
+    if (error) {
+      loginError.textContent = error.message;
+      return;
+    }
+    await afterLogin();
+  });
+
+  logoutBtn.addEventListener('click', async () => {
+    await supabase.auth.signOut();
+    location.reload();
+  });
+
+  async function afterLogin() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data: perf, error: perfError } = await supabase
+      .from('performers')
+      .select('id, handle, display_name')
+      .eq('auth_user_id', user.id)
+      .maybeSingle();
+
+    if (perfError || !perf) {
+      loginError.textContent = `Logged in as ${user.email} (auth id: ${user.id}), but no performer profile is linked to this account. ${perfError ? 'DB error: ' + perfError.message : ''}`;
+      console.error('Performer lookup failed', { authUserId: user.id, perfError });
+      return;
+    }
+    performer = perf;
+
+    loginView.classList.add('hidden');
+    consoleView.classList.remove('hidden');
+
+    await Promise.all([loadSongs(), loadSetlists(), loadActiveGig()]);
+    renderSongChecklist();
+    renderSetlists();
+    await renderRequests();
+  }
+
+  // ---------------- Data loading ----------------
+  async function loadSongs() {
+    const { data } = await supabase
+      .from('songs')
+      .select('id, title, artist')
+      .eq('performer_id', performer.id)
+      .order('title');
+    songs = data || [];
+  }
+
+  async function loadSetlists() {
+    const { data } = await supabase
+      .from('setlists')
+      .select('id, name, song_ids, created_at')
+      .eq('performer_id', performer.id)
+      .order('created_at', { ascending: false });
+    setlists = data || [];
+  }
+
+  async function loadActiveGig() {
+    const { data } = await supabase
+      .from('gig_sessions')
+      .select('id, gig_code, active_setlist_id, status, created_at')
+      .eq('performer_id', performer.id)
+      .eq('status', 'active')
+      .order('created_at', { ascending: false })
+      .maybeSingle();
+    activeGig = data || null;
+    renderActiveGigStatus();
+  }
+
+  // ---------------- Rendering ----------------
+  function renderActiveGigStatus() {
+    if (activeGig) {
+      const setlist = setlists.find(s => s.id === activeGig.active_setlist_id);
+      activeGigStatus.classList.remove('none');
+      activeGigStatus.textContent = `Live now — ${setlist ? setlist.name : 'a setlist'} (code ${activeGig.gig_code})`;
+    } else {
+      activeGigStatus.classList.add('none');
+      activeGigStatus.textContent = 'No active gig right now.';
+    }
+  }
+
+  function renderSongChecklist() {
+    songCheckList.innerHTML = songs.map(s => `
+      <label class="song-check-row">
+        <input type="checkbox" value="${s.id}" />
+        <span>
+          <div>${escapeHtml(s.title)}</div>
+          <div class="artist">${escapeHtml(s.artist)}</div>
+        </span>
+      </label>
+    `).join('');
+  }
+
+  function renderSetlists() {
+    setlistPicker.innerHTML = setlists.length
+      ? setlists.map(s => `<option value="${s.id}">${escapeHtml(s.name)} (${s.song_ids.length} songs)</option>`).join('')
+      : '<option value="">No saved setlists yet — build one below</option>';
+
+    setlistListEl.innerHTML = setlists.length
+      ? setlists.map(s => `
+          <div class="setlist-row">
+            <div>
+              <div class="setlist-name">${escapeHtml(s.name)}</div>
+              <div class="setlist-count">${s.song_ids.length} songs</div>
+            </div>
+          </div>
+        `).join('')
+      : '<div class="empty-note">No saved setlists yet.</div>';
+  }
+
+  async function renderRequests() {
+    if (!activeGig) {
+      requestListEl.innerHTML = '<div class="empty-note">No active gig — start one above to see requests here.</div>';
+      return;
+    }
+    const { data: requests } = await supabase
+      .from('requests')
+      .select('id, song_id, tip_amount, note, status, created_at')
+      .eq('gig_session_id', activeGig.id)
+      .eq('status', 'pending')
+      .order('tip_amount', { ascending: false })
+      .order('created_at', { ascending: true });
+
+    if (!requests || requests.length === 0) {
+      requestListEl.innerHTML = '<div class="empty-note">No pending requests right now.</div>';
+      return;
+    }
+
+    requestListEl.innerHTML = requests.map(r => {
+      const song = songs.find(s => s.id === r.song_id);
+      const title = song ? song.title : 'General tip (no song requested)';
+      const tipCls = r.tip_amount > 0 ? '' : 'zero';
+      const tipLabel = r.tip_amount > 0 ? `$${Number(r.tip_amount).toFixed(0)}` : 'No tip';
+      return `
+        <div class="request-row" data-request-id="${r.id}">
+          <div class="request-info">
+            <div class="title">${escapeHtml(title)}</div>
+            ${r.note ? `<div class="note">${escapeHtml(r.note)}</div>` : ''}
+          </div>
+          <div class="request-tip ${tipCls}">${tipLabel}</div>
+          <div class="request-actions">
+            <button class="secondary" data-accept="${r.id}">Accept</button>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    requestListEl.querySelectorAll('[data-accept]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.getAttribute('data-accept');
+        await supabase.from('requests').update({ status: 'accepted' }).eq('id', id);
+        renderRequests();
+      });
+    });
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str ?? '';
+    return div.innerHTML;
+  }
+
+  // ---------------- Actions ----------------
+  saveSetlistBtn.addEventListener('click', async () => {
+    const name = newSetlistName.value.trim();
+    if (!name) { alert('Give the setlist a name first.'); return; }
+    const checked = [...songCheckList.querySelectorAll('input[type=checkbox]:checked')].map(cb => cb.value);
+    if (checked.length === 0) { alert('Check at least one song.'); return; }
+
+    const { error } = await supabase.from('setlists').insert({
+      performer_id: performer.id,
+      name,
+      song_ids: checked
+    });
+    if (error) { alert('Could not save setlist: ' + error.message); return; }
+
+    newSetlistName.value = '';
+    songCheckList.querySelectorAll('input[type=checkbox]:checked').forEach(cb => cb.checked = false);
+    await loadSetlists();
+    renderSetlists();
+  });
+
+  startGigBtn.addEventListener('click', async () => {
+    const setlistId = setlistPicker.value;
+    if (!setlistId) { alert('Pick (or save) a setlist first.'); return; }
+
+    // End any currently active gig for this performer
+    await supabase
+      .from('gig_sessions')
+      .update({ status: 'ended' })
+      .eq('performer_id', performer.id)
+      .eq('status', 'active');
+
+    const setlist = setlists.find(s => s.id === setlistId);
+    const gigCode = 'G' + Date.now().toString(36).toUpperCase();
+
+    const { error } = await supabase.from('gig_sessions').insert({
+      gig_code: gigCode,
+      performer_id: performer.id,
+      active_setlist_id: setlistId,
+      runtime_order: setlist ? setlist.song_ids : [],
+      status: 'active'
+    });
+    if (error) { alert('Could not start gig: ' + error.message); return; }
+
+    await loadActiveGig();
+    await renderRequests();
+  });
+
+  // ---------------- Boot: resume session if already logged in ----------------
+  (async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) await afterLogin();
+  })();
+</script>
+
+</body>
+</html>
