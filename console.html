@@ -625,22 +625,32 @@
       return;
     }
 
-    setExportStatus(setlistId, `Fetching ${orderedSongs.length} charts…`);
     try {
       if (format === 'pdf') {
         const mergedPdf = await PDFDocument.create();
+        let i = 0;
         for (const s of orderedSongs) {
-          const bytes = await fetch(s.chart_url).then(r => {
-            if (!r.ok) throw new Error(`Could not fetch chart for "${s.title}"`);
-            return r.arrayBuffer();
-          });
-          const donorPdf = await PDFDocument.load(bytes);
+          i++;
+          setExportStatus(setlistId, `Fetching chart ${i}/${orderedSongs.length}: ${s.title}…`);
+          const res = await fetch(s.chart_url);
+          if (!res.ok) throw new Error(`Could not fetch chart for "${s.title}" (HTTP ${res.status} from ${s.chart_url})`);
+          const contentType = res.headers.get('content-type') || '(no content-type header)';
+          const bytes = await res.arrayBuffer();
+          let donorPdf;
+          try {
+            donorPdf = await PDFDocument.load(bytes);
+          } catch (parseErr) {
+            // Grab the first bit of the response as text to see what actually came back
+            const preview = new TextDecoder().decode(bytes.slice(0, 120));
+            throw new Error(`"${s.title}" didn't come back as a valid PDF (content-type: ${contentType}, size: ${bytes.byteLength} bytes, starts with: "${preview}"). URL: ${s.chart_url}`);
+          }
           const copiedPages = await mergedPdf.copyPages(donorPdf, donorPdf.getPageIndices());
           copiedPages.forEach(p => mergedPdf.addPage(p));
         }
         const mergedBytes = await mergedPdf.save();
         downloadBlob(new Blob([mergedBytes], { type: 'application/pdf' }), `${safeFilename(setlist.name)}.pdf`);
       } else if (format === 'zip') {
+        setExportStatus(setlistId, `Fetching ${orderedSongs.length} charts…`);
         const zip = new JSZip();
         for (const s of orderedSongs) {
           const bytes = await fetch(s.chart_url).then(r => {
