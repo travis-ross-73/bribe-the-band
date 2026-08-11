@@ -264,6 +264,36 @@
   .file-upload-row { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
   .file-upload-row input[type="file"] { margin-bottom: 0; }
   .or-divider { color: var(--muted); font-size: 0.78rem; text-align: center; margin: 6px 0; }
+
+  /* Manage songs (edit / replace PDF / delete) */
+  .manage-song-row {
+    background: #12141c;
+    border: 1px solid #2a2e40;
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+  }
+  .manage-song-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .manage-song-grid input { margin-bottom: 0; }
+  .manage-song-row .row-bottom {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: 8px;
+    flex-wrap: wrap;
+  }
+  .manage-song-row .row-bottom input[type="file"] { font-size: 0.78rem; max-width: 200px; }
+  .manage-song-row .chart-link { font-size: 0.78rem; }
+  .manage-song-row .chart-link a { color: var(--accent); }
+  .manage-song-status { font-size: 0.78rem; color: var(--muted); margin-top: 6px; }
+  .manage-song-status.ok { color: var(--success); }
+  .manage-song-status.err { color: var(--danger); }
+  #song-manage-search { margin-bottom: 12px; }
 </style>
 </head>
 <body>
@@ -359,6 +389,13 @@
       <div class="error-msg" id="bulk-error"></div>
     </section>
 
+    <section>
+      <h2>Manage Songs</h2>
+      <div class="section-sub">Edit song info, replace a chart PDF, or remove a song from your catalog entirely.</div>
+      <input type="text" id="song-manage-search" placeholder="Search your catalog…" />
+      <div id="manage-song-list"></div>
+    </section>
+
   </main>
 </div>
 
@@ -421,6 +458,9 @@
 
   let bulkQueue = []; // [{ file, title, artist, key, capo, status, statusClass }]
 
+  const songManageSearch = document.getElementById('song-manage-search');
+  const manageSongListEl = document.getElementById('manage-song-list');
+
   // ---------------- Auth ----------------
   loginBtn.addEventListener('click', async () => {
     loginError.textContent = '';
@@ -463,6 +503,7 @@
     await Promise.all([loadSongs(), loadSetlists(), loadActiveGig()]);
     renderBuilder();
     renderSetlists();
+    renderManageSongs();
     await renderRequests();
   }
 
@@ -470,7 +511,7 @@
   async function loadSongs() {
     const { data } = await supabase
       .from('songs')
-      .select('id, title, artist, chart_url')
+      .select('id, title, artist, chart_url, song_key, key_with_capo')
       .eq('performer_id', performer.id)
       .order('title');
     songs = data || [];
@@ -941,6 +982,7 @@
 
     await loadSongs();
     renderBuilder();
+    renderManageSongs();
   });
 
   // ---------------- Bulk add from PDFs ----------------
@@ -1069,7 +1111,106 @@
     bulkError.textContent = `${successCount}/${bulkQueue.length} songs added.`;
     await loadSongs();
     renderBuilder();
+    renderManageSongs();
   });
+
+  // ---------------- Manage songs (edit / replace PDF / delete) ----------------
+  function renderManageSongs() {
+    const q = songManageSearch.value.trim().toLowerCase();
+    const list = q
+      ? songs.filter(s => s.title.toLowerCase().includes(q) || s.artist.toLowerCase().includes(q))
+      : songs;
+
+    if (list.length === 0) {
+      manageSongListEl.innerHTML = '<div class="empty-note">No songs match.</div>';
+      return;
+    }
+
+    manageSongListEl.innerHTML = list.map(s => `
+      <div class="manage-song-row" data-song="${s.id}">
+        <div class="manage-song-grid">
+          <input type="text" data-field="title" value="${escapeHtml(s.title)}" placeholder="Title" />
+          <input type="text" data-field="artist" value="${escapeHtml(s.artist)}" placeholder="Artist" />
+          <input type="text" data-field="song_key" value="${escapeHtml(s.song_key || '')}" placeholder="Key" />
+          <input type="text" data-field="key_with_capo" value="${escapeHtml(s.key_with_capo || '')}" placeholder="Key with capo" />
+        </div>
+        <div class="row-bottom">
+          <div class="chart-link"><a href="${s.chart_url}" target="_blank" rel="noopener">View current PDF</a></div>
+          <input type="file" data-replace-pdf accept="application/pdf" />
+          <div class="button-row" style="flex:0; gap:6px;">
+            <button class="tiny" data-save>Save</button>
+            <button class="tiny danger" data-delete>Delete</button>
+          </div>
+        </div>
+        <div class="manage-song-status" data-status></div>
+      </div>
+    `).join('');
+
+    manageSongListEl.querySelectorAll('[data-song]').forEach(row => {
+      const songId = row.getAttribute('data-song');
+      const statusEl = row.querySelector('[data-status]');
+      const setStatus = (text, cls) => {
+        statusEl.textContent = text;
+        statusEl.className = 'manage-song-status' + (cls ? ' ' + cls : '');
+      };
+
+      row.querySelector('[data-save]').addEventListener('click', async () => {
+        const title = row.querySelector('[data-field="title"]').value.trim();
+        const artist = row.querySelector('[data-field="artist"]').value.trim();
+        const songKey = row.querySelector('[data-field="song_key"]').value.trim();
+        const capo = row.querySelector('[data-field="key_with_capo"]').value.trim();
+        const fileInput = row.querySelector('[data-replace-pdf]');
+        const replacementFile = fileInput.files && fileInput.files[0];
+
+        if (!title || !artist) {
+          setStatus('Title and artist are required.', 'err');
+          return;
+        }
+
+        const updates = {
+          title,
+          artist,
+          song_key: songKey || null,
+          key_with_capo: capo || null
+        };
+
+        try {
+          if (replacementFile) {
+            setStatus('Uploading new PDF…');
+            updates.chart_url = await uploadPdfForSlug(replacementFile, songId);
+          }
+          setStatus('Saving…');
+          const { error } = await supabase.from('songs').update(updates).eq('id', songId);
+          if (error) throw new Error(error.message);
+          setStatus('Saved.', 'ok');
+          fileInput.value = '';
+          await loadSongs();
+          renderBuilder();
+        } catch (err) {
+          setStatus('Failed: ' + err.message, 'err');
+        }
+      });
+
+      row.querySelector('[data-delete]').addEventListener('click', async () => {
+        const song = songs.find(s => s.id === songId);
+        const label = song ? `"${song.title}"` : 'this song';
+        if (!confirm(`Delete ${label} from your catalog? This can't be undone. (Note: it will also disappear from any saved setlists that include it.)`)) {
+          return;
+        }
+        setStatus('Deleting…');
+        const { error } = await supabase.from('songs').delete().eq('id', songId);
+        if (error) {
+          setStatus('Failed: ' + error.message, 'err');
+          return;
+        }
+        await loadSongs();
+        renderBuilder();
+        renderManageSongs();
+      });
+    });
+  }
+
+  songManageSearch.addEventListener('input', renderManageSongs);
 
   // ---------------- Actions: gig control ----------------
   startGigBtn.addEventListener('click', async () => {
