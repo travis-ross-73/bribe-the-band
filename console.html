@@ -1115,6 +1115,12 @@
   });
 
   // ---------------- Manage songs (edit / replace PDF / delete) ----------------
+  // Appends a cache-busting query param so a browser tab doesn't hold onto a
+  // stale cached copy of the PDF at the same URL after a replacement upload.
+  function chartLinkHref(url) {
+    return `${url}?v=${Date.now()}`;
+  }
+
   function renderManageSongs() {
     const q = songManageSearch.value.trim().toLowerCase();
     const list = q
@@ -1135,7 +1141,7 @@
           <input type="text" data-field="key_with_capo" value="${escapeHtml(s.key_with_capo || '')}" placeholder="Key with capo" />
         </div>
         <div class="row-bottom">
-          <div class="chart-link"><a href="${s.chart_url}" target="_blank" rel="noopener">View current PDF</a></div>
+          <div class="chart-link"><a href="${chartLinkHref(s.chart_url)}" target="_blank" rel="noopener" data-chart-link>View current PDF</a></div>
           <input type="file" data-replace-pdf accept="application/pdf" />
           <div class="button-row" style="flex:0; gap:6px;">
             <button class="tiny" data-save>Save</button>
@@ -1186,6 +1192,13 @@
           fileInput.value = '';
           await loadSongs();
           renderBuilder();
+          // Refresh just this row's "view PDF" link in place, rather than
+          // re-rendering the whole Manage Songs list (which would blow away
+          // any edits in progress on other rows).
+          if (updates.chart_url) {
+            const linkEl = row.querySelector('[data-chart-link]');
+            if (linkEl) linkEl.setAttribute('href', chartLinkHref(updates.chart_url));
+          }
         } catch (err) {
           setStatus('Failed: ' + err.message, 'err');
         }
