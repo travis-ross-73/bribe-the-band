@@ -222,6 +222,48 @@
     margin-bottom: 10px;
   }
   .hidden { display: none !important; }
+
+  /* Bulk upload table */
+  .bulk-table-wrap { overflow-x: auto; margin-top: 12px; }
+  table.bulk-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  table.bulk-table th {
+    text-align: left;
+    color: var(--muted);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    padding: 6px 6px;
+    border-bottom: 1px solid #2a2e40;
+  }
+  table.bulk-table td {
+    padding: 5px 6px;
+    border-bottom: 1px solid #232741;
+    vertical-align: middle;
+  }
+  table.bulk-table input {
+    margin-bottom: 0;
+    padding: 6px 8px;
+    font-size: 0.85rem;
+  }
+  table.bulk-table .bulk-filename {
+    color: var(--muted);
+    font-size: 0.75rem;
+    max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  table.bulk-table .bulk-status {
+    font-size: 0.75rem;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  table.bulk-table .bulk-status.ok { color: var(--success); }
+  table.bulk-table .bulk-status.err { color: var(--danger); }
+  #bulk-file-input { margin-bottom: 10px; }
+  .file-upload-row { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
+  .file-upload-row input[type="file"] { margin-bottom: 0; }
+  .or-divider { color: var(--muted); font-size: 0.78rem; text-align: center; margin: 6px 0; }
 </style>
 </head>
 <body>
@@ -291,14 +333,30 @@
 
     <section>
       <h2>Add a Song</h2>
-      <div class="section-sub">Upload the chart PDF to Wasabi yourself first (same as before), then paste its public URL here along with the song info. This adds it to your catalog so it shows up in the setlist builder and on the crowd page.</div>
+      <div class="section-sub">Upload the chart PDF right here — we'll send it to your Wasabi bucket for you. (You can still paste a URL instead if you've already hosted it somewhere.)</div>
       <input type="text" id="new-song-title" placeholder="Song title" />
       <input type="text" id="new-song-artist" placeholder="Artist" />
       <input type="text" id="new-song-key" placeholder="Key, e.g. 'G'" />
       <input type="text" id="new-song-capo" placeholder="Key with capo (optional), e.g. 'Capo 3 (play D shapes)'" />
-      <input type="text" id="new-song-url" placeholder="Chart PDF URL (from Wasabi)" />
+      <div class="file-upload-row">
+        <input type="file" id="new-song-file" accept="application/pdf" />
+      </div>
+      <div class="or-divider">— or —</div>
+      <input type="text" id="new-song-url" placeholder="Chart PDF URL (if already hosted elsewhere)" />
       <button class="primary" id="add-song-btn">Add Song</button>
       <div class="error-msg" id="add-song-error"></div>
+    </section>
+
+    <section>
+      <h2>Bulk Add from PDFs</h2>
+      <div class="section-sub">Select several chart PDFs at once. We'll guess each song's title and artist from its filename — review and fix anything in the table below, then upload them all in one go.</div>
+      <input type="file" id="bulk-file-input" accept="application/pdf" multiple />
+      <div id="bulk-table-container"></div>
+      <div class="button-row hidden" id="bulk-actions-row">
+        <button class="primary" id="bulk-upload-btn">Upload All</button>
+        <button class="secondary" id="bulk-clear-btn">Clear</button>
+      </div>
+      <div class="error-msg" id="bulk-error"></div>
     </section>
 
   </main>
@@ -349,9 +407,19 @@
   const newSongArtist = document.getElementById('new-song-artist');
   const newSongKey = document.getElementById('new-song-key');
   const newSongCapo = document.getElementById('new-song-capo');
+  const newSongFile = document.getElementById('new-song-file');
   const newSongUrl = document.getElementById('new-song-url');
   const addSongBtn = document.getElementById('add-song-btn');
   const addSongError = document.getElementById('add-song-error');
+
+  const bulkFileInput = document.getElementById('bulk-file-input');
+  const bulkTableContainer = document.getElementById('bulk-table-container');
+  const bulkActionsRow = document.getElementById('bulk-actions-row');
+  const bulkUploadBtn = document.getElementById('bulk-upload-btn');
+  const bulkClearBtn = document.getElementById('bulk-clear-btn');
+  const bulkError = document.getElementById('bulk-error');
+
+  let bulkQueue = []; // [{ file, title, artist, key, capo, status, statusClass }]
 
   // ---------------- Auth ----------------
   loginBtn.addEventListener('click', async () => {
@@ -775,12 +843,43 @@
     return title.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'song';
   }
 
-  function uniqueSlug(baseSlug) {
+  function uniqueSlug(baseSlug, extraUsed) {
     const existingIds = new Set(songs.map(s => s.id));
+    if (extraUsed) extraUsed.forEach(id => existingIds.add(id));
     if (!existingIds.has(baseSlug)) return baseSlug;
     let i = 2;
     while (existingIds.has(`${baseSlug}-${i}`)) i++;
     return `${baseSlug}-${i}`;
+  }
+
+  // ---------------- Wasabi upload (via serverless presigned-URL function) ----------------
+  async function getAccessToken() {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) throw new Error('Not logged in.');
+    return session.access_token;
+  }
+
+  // Uploads a PDF File object for the given song slug and returns its public chart URL.
+  async function uploadPdfForSlug(file, slug) {
+    const token = await getAccessToken();
+    const res = await fetch('/api/wasabi-upload-url', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ songSlug: slug })
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(body.error || `Could not get an upload link (HTTP ${res.status}).`);
+    }
+    const putRes = await fetch(body.uploadUrl, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/pdf' },
+      body: file
+    });
+    if (!putRes.ok) {
+      throw new Error(`Upload to storage failed (HTTP ${putRes.status}).`);
+    }
+    return body.publicUrl;
   }
 
   addSongBtn.addEventListener('click', async () => {
@@ -789,14 +888,33 @@
     const artist = newSongArtist.value.trim();
     const key = newSongKey.value.trim();
     const capo = newSongCapo.value.trim();
-    const chartUrl = newSongUrl.value.trim();
+    const pastedUrl = newSongUrl.value.trim();
+    const file = newSongFile.files && newSongFile.files[0];
 
-    if (!title || !artist || !chartUrl) {
-      addSongError.textContent = 'Title, artist, and chart PDF URL are required.';
+    if (!title || !artist) {
+      addSongError.textContent = 'Title and artist are required.';
+      return;
+    }
+    if (!file && !pastedUrl) {
+      addSongError.textContent = 'Choose a PDF to upload, or paste a chart URL.';
       return;
     }
 
     const id = uniqueSlug(slugify(title));
+    addSongBtn.disabled = true;
+
+    let chartUrl = pastedUrl;
+    try {
+      if (file) {
+        addSongError.textContent = 'Uploading PDF…';
+        addSongError.style.color = '';
+        chartUrl = await uploadPdfForSlug(file, id);
+      }
+    } catch (err) {
+      addSongError.textContent = 'Upload failed: ' + err.message;
+      addSongBtn.disabled = false;
+      return;
+    }
 
     const { error } = await supabase.from('songs').insert({
       id,
@@ -807,17 +925,148 @@
       key_with_capo: capo || null,
       chart_url: chartUrl
     });
+    addSongBtn.disabled = false;
     if (error) {
       addSongError.textContent = 'Could not add song: ' + error.message;
       return;
     }
 
+    addSongError.textContent = '';
     newSongTitle.value = '';
     newSongArtist.value = '';
     newSongKey.value = '';
     newSongCapo.value = '';
     newSongUrl.value = '';
+    newSongFile.value = '';
 
+    await loadSongs();
+    renderBuilder();
+  });
+
+  // ---------------- Bulk add from PDFs ----------------
+  function parseFilenameGuess(filename) {
+    const base = filename.replace(/\.pdf$/i, '');
+    const cleaned = base.replace(/[_]+/g, ' ').trim();
+    // Common convention: "Title - Artist.pdf" — split on the first " - "
+    const parts = cleaned.split(/\s*-\s*/);
+    if (parts.length >= 2) {
+      return { title: parts[0].trim(), artist: parts.slice(1).join(' - ').trim() };
+    }
+    return { title: cleaned, artist: '' };
+  }
+
+  bulkFileInput.addEventListener('change', () => {
+    const files = Array.from(bulkFileInput.files || []);
+    bulkError.textContent = '';
+    bulkQueue = files.map(file => {
+      const guess = parseFilenameGuess(file.name);
+      return { file, title: guess.title, artist: guess.artist, key: '', capo: '', status: '', statusClass: '' };
+    });
+    renderBulkTable();
+  });
+
+  function renderBulkTable() {
+    if (bulkQueue.length === 0) {
+      bulkTableContainer.innerHTML = '';
+      bulkActionsRow.classList.add('hidden');
+      return;
+    }
+    bulkActionsRow.classList.remove('hidden');
+    bulkTableContainer.innerHTML = `
+      <div class="bulk-table-wrap">
+        <table class="bulk-table">
+          <thead>
+            <tr>
+              <th>File</th>
+              <th>Title</th>
+              <th>Artist</th>
+              <th>Key</th>
+              <th>Capo</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${bulkQueue.map((row, i) => `
+              <tr data-row="${i}">
+                <td class="bulk-filename" title="${escapeHtml(row.file.name)}">${escapeHtml(row.file.name)}</td>
+                <td><input type="text" data-field="title" data-row="${i}" value="${escapeHtml(row.title)}" /></td>
+                <td><input type="text" data-field="artist" data-row="${i}" value="${escapeHtml(row.artist)}" /></td>
+                <td><input type="text" data-field="key" data-row="${i}" value="${escapeHtml(row.key)}" style="width:60px;" /></td>
+                <td><input type="text" data-field="capo" data-row="${i}" value="${escapeHtml(row.capo)}" style="width:90px;" /></td>
+                <td class="bulk-status ${row.statusClass}">${escapeHtml(row.status)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+    bulkTableContainer.querySelectorAll('input[data-field]').forEach(input => {
+      input.addEventListener('input', () => {
+        const i = Number(input.getAttribute('data-row'));
+        const field = input.getAttribute('data-field');
+        bulkQueue[i][field] = input.value;
+      });
+    });
+  }
+
+  function setBulkRowStatus(i, text, cls) {
+    bulkQueue[i].status = text;
+    bulkQueue[i].statusClass = cls || '';
+    const row = bulkTableContainer.querySelector(`tr[data-row="${i}"] .bulk-status`);
+    if (row) {
+      row.textContent = text;
+      row.className = `bulk-status ${cls || ''}`;
+    }
+  }
+
+  bulkClearBtn.addEventListener('click', () => {
+    bulkQueue = [];
+    bulkFileInput.value = '';
+    bulkError.textContent = '';
+    renderBulkTable();
+  });
+
+  bulkUploadBtn.addEventListener('click', async () => {
+    bulkError.textContent = '';
+    bulkUploadBtn.disabled = true;
+    const usedSlugsThisBatch = [];
+    let successCount = 0;
+
+    for (let i = 0; i < bulkQueue.length; i++) {
+      const row = bulkQueue[i];
+      const title = row.title.trim();
+      const artist = row.artist.trim();
+      if (!title) {
+        setBulkRowStatus(i, 'Skipped — no title', 'err');
+        continue;
+      }
+      const slug = uniqueSlug(slugify(title), usedSlugsThisBatch);
+      usedSlugsThisBatch.push(slug);
+
+      try {
+        setBulkRowStatus(i, 'Uploading…', '');
+        const chartUrl = await uploadPdfForSlug(row.file, slug);
+        setBulkRowStatus(i, 'Saving…', '');
+        const { error } = await supabase.from('songs').insert({
+          id: slug,
+          performer_id: performer.id,
+          title,
+          artist: artist || '(unknown)',
+          song_key: row.key.trim() || null,
+          key_with_capo: row.capo.trim() || null,
+          chart_url: chartUrl
+        });
+        if (error) throw new Error(error.message);
+        setBulkRowStatus(i, 'Done', 'ok');
+        successCount++;
+      } catch (err) {
+        setBulkRowStatus(i, 'Failed: ' + err.message, 'err');
+      }
+    }
+
+    bulkUploadBtn.disabled = false;
+    bulkError.style.color = '';
+    bulkError.textContent = `${successCount}/${bulkQueue.length} songs added.`;
     await loadSongs();
     renderBuilder();
   });

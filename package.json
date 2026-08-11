@@ -1,0 +1,11 @@
+{
+  "name": "bribe-the-band",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Bribe The Band — static site + serverless functions (Vercel).",
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.600.0",
+    "@aws-sdk/s3-request-presigner": "^3.600.0",
+    "@supabase/supabase-js": "^2.45.0"
+  }
+}
