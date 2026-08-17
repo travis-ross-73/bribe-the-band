@@ -182,7 +182,7 @@
     <div class="full-screen-message hidden" id="no-gig-screen">
       <h2>No active gig right now</h2>
       <p>Start a gig from the console before starting the set.</p>
-      <button onclick="window.location.href='console.html'">Back to Console</button>
+      <button onclick="exitToConsole()">Back to Console</button>
     </div>
 
     <div class="full-screen-message hidden" id="end-screen">
@@ -235,9 +235,16 @@
   let playCounts = {};     // song_id -> count of plays recorded so far tonight
   let atEnd = false;
 
-  exitBtn.addEventListener('click', () => {
-    window.location.href = 'console.html';
-  });
+  window.exitToConsole = function () {
+    // The viewer opens in its own tab from the console, so closing it
+    // returns you to the console tab directly. If the browser won't allow
+    // a script-closed tab (e.g. this page wasn't opened via window.open,
+    // such as a bookmark or typed URL), fall back to navigating there.
+    window.close();
+    setTimeout(() => { window.location.href = 'console.html'; }, 150);
+  };
+
+  exitBtn.addEventListener('click', exitToConsole);
 
   window.restartSet = function () {
     atEnd = false;
