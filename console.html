@@ -822,7 +822,7 @@
     requestListEl.innerHTML = requests.map(r => {
       const song = songs.find(s => s.id === r.song_id);
       const title = song ? song.title : 'General tip (no song requested)';
-      const keyLabel = song ? (song.key_with_capo || song.song_key) : '';
+      const keyLabel = song ? formatKeyLabel(song) : '';
       const tipCls = r.tip_amount > 0 ? '' : 'zero';
       const tipLabel = r.tip_amount > 0 ? `$${Number(r.tip_amount).toFixed(0)}` : 'No tip';
       return `
@@ -847,6 +847,19 @@
         renderRequests();
       });
     });
+  }
+
+  // Combines song_key + key_with_capo into one display string, e.g. "G" or
+  // "D · Capo 7 (play D shapes)". key_with_capo is always populated in the
+  // data (often literally "No capo"), so it's only shown when it's actually
+  // telling you something beyond the plain key.
+  function formatKeyLabel(song) {
+    const parts = [];
+    if (song.song_key) parts.push(song.song_key);
+    if (song.key_with_capo && !/^\s*no capo\s*$/i.test(song.key_with_capo)) {
+      parts.push(song.key_with_capo);
+    }
+    return parts.join(' · ');
   }
 
   function escapeHtml(str) {
