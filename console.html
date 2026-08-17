@@ -398,6 +398,13 @@
       <div id="manage-song-list"></div>
     </section>
 
+    <section>
+      <h2>One-Time Cleanup</h2>
+      <div class="section-sub">Moves any chart PDFs still sitting in the old handle-based storage folder into your ID-based folder (the one everything uploaded through this console already uses), and removes the leftover originals for any song you've already replaced. Safe to run more than once — anything already up to date is left alone.</div>
+      <button class="secondary" id="migrate-charts-btn">Migrate Legacy Chart Files</button>
+      <div class="manage-song-status" id="migrate-status"></div>
+    </section>
+
   </main>
 </div>
 
@@ -462,6 +469,9 @@
 
   const songManageSearch = document.getElementById('song-manage-search');
   const manageSongListEl = document.getElementById('manage-song-list');
+
+  const migrateChartsBtn = document.getElementById('migrate-charts-btn');
+  const migrateStatusEl = document.getElementById('migrate-status');
 
   // ---------------- Auth ----------------
   loginBtn.addEventListener('click', async () => {
@@ -1290,6 +1300,38 @@
   }
 
   songManageSearch.addEventListener('input', renderManageSongs);
+
+  // ---------------- One-time cleanup: migrate legacy chart folder ----------------
+  migrateChartsBtn.addEventListener('click', async () => {
+    migrateChartsBtn.disabled = true;
+    migrateStatusEl.className = 'manage-song-status';
+    migrateStatusEl.textContent = 'Migrating… this may take a moment.';
+    try {
+      const token = await getAccessToken();
+      const res = await fetch('/api/migrate-legacy-charts', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + token }
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+
+      const parts = [];
+      parts.push(`${body.migrated.length} file(s) moved to your ID folder.`);
+      if (body.alreadyUpToDate.length) parts.push(`${body.alreadyUpToDate.length} leftover original(s) removed (already replaced).`);
+      if (body.errors.length) parts.push(`${body.errors.length} error(s): ${body.errors.join(' | ')}`);
+      migrateStatusEl.textContent = parts.join(' ');
+      migrateStatusEl.className = 'manage-song-status ' + (body.errors.length ? 'err' : 'ok');
+
+      await loadSongs();
+      renderBuilder();
+      renderManageSongs();
+    } catch (err) {
+      migrateStatusEl.textContent = 'Failed: ' + err.message;
+      migrateStatusEl.className = 'manage-song-status err';
+    } finally {
+      migrateChartsBtn.disabled = false;
+    }
+  });
 
   // ---------------- Actions: gig control ----------------
   startGigBtn.addEventListener('click', async () => {
