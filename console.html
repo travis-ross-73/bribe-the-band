@@ -191,7 +191,9 @@
     gap: 10px;
   }
   .request-info .title { font-weight: 600; }
+  .request-info .request-key { color: var(--muted); font-weight: 400; font-size: 0.85rem; }
   .request-info .note { color: var(--muted); font-size: 0.85rem; margin-top: 2px; }
+  .request-info .note a { color: var(--accent); }
   .request-tip { font-weight: 700; color: var(--accent); white-space: nowrap; }
   .request-tip.zero { color: var(--muted); font-weight: 400; }
   .request-actions { display: flex; gap: 6px; }
@@ -325,7 +327,7 @@
 
     <section>
       <h2>Incoming Requests</h2>
-      <div class="section-sub">Tip-ranked, highest first. "Accept" just clears it from this queue for now — full swipe/queue integration comes with the chart viewer in Stage 2.</div>
+      <div class="section-sub">Tip-ranked, highest first, with the song's key and a chart link for quick reference. "Dismiss" clears it from this queue for now — full swipe/queue integration comes with the chart viewer in Stage 2.</div>
       <div id="request-list"></div>
     </section>
 
@@ -820,25 +822,27 @@
     requestListEl.innerHTML = requests.map(r => {
       const song = songs.find(s => s.id === r.song_id);
       const title = song ? song.title : 'General tip (no song requested)';
+      const keyLabel = song ? (song.key_with_capo || song.song_key) : '';
       const tipCls = r.tip_amount > 0 ? '' : 'zero';
       const tipLabel = r.tip_amount > 0 ? `$${Number(r.tip_amount).toFixed(0)}` : 'No tip';
       return `
         <div class="request-row" data-request-id="${r.id}">
           <div class="request-info">
-            <div class="title">${escapeHtml(title)}</div>
+            <div class="title">${escapeHtml(title)}${keyLabel ? ` <span class="request-key">(${escapeHtml(keyLabel)})</span>` : ''}</div>
             ${r.note ? `<div class="note">${escapeHtml(r.note)}</div>` : ''}
+            ${song && song.chart_url ? `<div class="note"><a href="${song.chart_url}" target="_blank" rel="noopener">Open chart</a></div>` : ''}
           </div>
           <div class="request-tip ${tipCls}">${tipLabel}</div>
           <div class="request-actions">
-            <button class="secondary" data-accept="${r.id}">Accept</button>
+            <button class="secondary" data-dismiss="${r.id}">Dismiss</button>
           </div>
         </div>
       `;
     }).join('');
 
-    requestListEl.querySelectorAll('[data-accept]').forEach(btn => {
+    requestListEl.querySelectorAll('[data-dismiss]').forEach(btn => {
       btn.addEventListener('click', async () => {
-        const id = btn.getAttribute('data-accept');
+        const id = btn.getAttribute('data-dismiss');
         await supabase.from('requests').update({ status: 'accepted' }).eq('id', id);
         renderRequests();
       });
@@ -921,6 +925,31 @@
       throw new Error(`Upload to storage failed (HTTP ${putRes.status}).`);
     }
     return body.publicUrl;
+  }
+
+  // Deletes the chart PDF for a given song slug from Wasabi.
+  async function deletePdfForSlug(slug) {
+    const token = await getAccessToken();
+    const res = await fetch('/api/wasabi-delete-chart', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ songSlug: slug })
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error || `Could not delete file from storage (HTTP ${res.status}).`);
+    }
+  }
+
+  // Strips a song id out of every saved setlist's song_ids array so a
+  // deleted song doesn't linger as "(unknown song)" in old setlists.
+  async function removeSongFromAllSetlists(songId) {
+    const affected = setlists.filter(s => s.song_ids.includes(songId));
+    for (const s of affected) {
+      const newIds = s.song_ids.filter(id => id !== songId);
+      const { error } = await supabase.from('setlists').update({ song_ids: newIds }).eq('id', s.id);
+      if (error) throw new Error(error.message);
+    }
   }
 
   addSongBtn.addEventListener('click', async () => {
@@ -1207,17 +1236,41 @@
       row.querySelector('[data-delete]').addEventListener('click', async () => {
         const song = songs.find(s => s.id === songId);
         const label = song ? `"${song.title}"` : 'this song';
-        if (!confirm(`Delete ${label} from your catalog? This can't be undone. (Note: it will also disappear from any saved setlists that include it.)`)) {
+        if (!confirm(`Delete ${label}? This removes it from your catalog, deletes its chart PDF from storage, and takes it out of any saved setlists that include it. This can't be undone.`)) {
           return;
         }
+
+        setStatus('Removing from saved setlists…');
+        try {
+          await removeSongFromAllSetlists(songId);
+        } catch (err) {
+          console.error('Could not update setlists while deleting song', err);
+          // Not fatal — continue with the delete either way.
+        }
+
+        setStatus('Deleting chart file…');
+        try {
+          await deletePdfForSlug(songId);
+        } catch (err) {
+          console.error('Could not delete chart file from storage', err);
+          // Not fatal — the catalog row is the source of truth; an orphaned
+          // file in Wasabi is a lesser problem than a stuck "can't delete".
+        }
+
         setStatus('Deleting…');
         const { error } = await supabase.from('songs').delete().eq('id', songId);
         if (error) {
           setStatus('Failed: ' + error.message, 'err');
           return;
         }
-        await loadSongs();
+
+        // Also drop it from whatever's currently in the builder, in case
+        // it's mid-edit and hasn't been saved yet.
+        builderSongIds = builderSongIds.filter(id => id !== songId);
+
+        await Promise.all([loadSongs(), loadSetlists()]);
         renderBuilder();
+        renderSetlists();
         renderManageSongs();
       });
     });
