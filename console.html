@@ -204,15 +204,21 @@
 
   #start-set-btn {
     width: 100%;
-    background: #2a2e40;
-    color: var(--muted);
-    border: 1px dashed #3a3f55;
+    background: var(--accent);
+    color: #12141c;
+    border: none;
     border-radius: 10px;
     padding: 14px 0;
     font-weight: 700;
     font-size: 1rem;
-    cursor: not-allowed;
+    cursor: pointer;
     margin-top: 4px;
+  }
+  #start-set-btn:disabled {
+    background: #2a2e40;
+    color: var(--muted);
+    border: 1px dashed #3a3f55;
+    cursor: not-allowed;
   }
   #editing-banner {
     background: #2a2414;
@@ -322,7 +328,7 @@
       <div id="active-gig-status" class="none">No active gig right now.</div>
       <select id="setlist-picker"></select>
       <button class="primary" id="start-gig-btn">Start New Gig With Selected Setlist</button>
-      <button id="start-set-btn" disabled>Start the Set (coming in Stage 2 — chart viewer)</button>
+      <button id="start-set-btn" disabled>Start the Set</button>
     </section>
 
     <section>
@@ -430,6 +436,7 @@
   const activeGigStatus = document.getElementById('active-gig-status');
   const setlistPicker = document.getElementById('setlist-picker');
   const startGigBtn = document.getElementById('start-gig-btn');
+  const startSetBtn = document.getElementById('start-set-btn');
   const requestListEl = document.getElementById('request-list');
 
   const editingBanner = document.getElementById('editing-banner');
@@ -547,11 +554,18 @@
       const setlist = setlists.find(s => s.id === activeGig.active_setlist_id);
       activeGigStatus.classList.remove('none');
       activeGigStatus.textContent = `Live now — ${setlist ? setlist.name : 'a setlist'} (code ${activeGig.gig_code})`;
+      startSetBtn.disabled = !(activeGig.runtime_order && activeGig.runtime_order.length > 0);
     } else {
       activeGigStatus.classList.add('none');
       activeGigStatus.textContent = 'No active gig right now.';
+      startSetBtn.disabled = true;
     }
   }
+
+  startSetBtn.addEventListener('click', () => {
+    if (!activeGig) return;
+    window.location.href = 'viewer.html';
+  });
 
   // ---------------- Rendering: setlist builder (search + ordered set) ----------------
   function renderBuilder() {

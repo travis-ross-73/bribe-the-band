@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Bribe The Band — Set Viewer</title>
+<style>
+  :root {
+    --bg: #0c0d13;
+    --card: #1b1e2b;
+    --accent: #f2b134;
+    --accent-dark: #d99a1f;
+    --text: #f4f4f6;
+    --muted: #9a9db0;
+    --danger: #e0616b;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    overflow: hidden;
+  }
+
+  #app { display: flex; flex-direction: column; height: 100%; }
+
+  header {
+    flex-shrink: 0;
+    padding: 10px 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #232741;
+    background: var(--card);
+    gap: 10px;
+  }
+  .song-info { min-width: 0; }
+  .song-info .title { font-weight: 700; font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .song-info .sub { color: var(--muted); font-size: 0.78rem; margin-top: 2px; }
+  header .right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  .play-badge {
+    background: #232741;
+    color: var(--accent);
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 4px 9px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  #exit-btn {
+    background: transparent;
+    border: 1px solid #2a2e40;
+    color: var(--muted);
+    padding: 7px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.82rem;
+    white-space: nowrap;
+  }
+
+  #stage {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #05060a;
+  }
+  #page-canvas {
+    max-width: 100%;
+    max-height: 100%;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.5);
+    background: #fff;
+  }
+
+  .click-zone {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 45%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    z-index: 2;
+  }
+  .click-zone.left { left: 0; justify-content: flex-start; }
+  .click-zone.right { right: 0; justify-content: flex-end; }
+  .click-zone .arrow {
+    opacity: 0;
+    color: rgba(255,255,255,0.35);
+    font-size: 2.2rem;
+    padding: 0 14px;
+    transition: opacity 0.15s;
+    pointer-events: none;
+  }
+  .click-zone:hover .arrow { opacity: 1; }
+  .click-zone.disabled { cursor: default; }
+  .click-zone.disabled .arrow { display: none; }
+
+  footer {
+    flex-shrink: 0;
+    padding: 8px 14px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.75rem;
+    background: var(--card);
+    border-top: 1px solid #232741;
+  }
+
+  .full-screen-message {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 30px;
+    gap: 14px;
+    z-index: 5;
+  }
+  .full-screen-message h2 { margin: 0; font-size: 1.3rem; }
+  .full-screen-message p { color: var(--muted); max-width: 420px; margin: 0; line-height: 1.5; }
+  .full-screen-message .error-detail { color: var(--danger); font-size: 0.85rem; max-width: 480px; }
+  .full-screen-message button {
+    background: var(--accent);
+    color: #12141c;
+    border: none;
+    border-radius: 8px;
+    padding: 12px 20px;
+    font-weight: 700;
+    font-size: 0.95rem;
+    cursor: pointer;
+  }
+  .full-screen-message button.secondary {
+    background: transparent;
+    border: 1px solid #2a2e40;
+    color: var(--text);
+    font-weight: 400;
+  }
+  .spinner {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    border: 3px solid #2a2e40;
+    border-top-color: var(--accent);
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <header id="top-bar" class="hidden">
+    <div class="song-info">
+      <div class="title" id="song-title">—</div>
+      <div class="sub" id="song-sub">—</div>
+    </div>
+    <div class="right">
+      <div class="play-badge hidden" id="play-badge">played 0x tonight</div>
+      <button id="exit-btn">Exit to Console</button>
+    </div>
+  </header>
+
+  <div id="stage">
+    <canvas id="page-canvas" class="hidden"></canvas>
+    <div class="click-zone left" id="zone-prev"><span class="arrow">‹</span></div>
+    <div class="click-zone right" id="zone-next"><span class="arrow">›</span></div>
+
+    <div class="full-screen-message" id="loading-screen">
+      <div class="spinner"></div>
+      <h2>Loading tonight's set…</h2>
+      <p id="loading-detail">Fetching charts from storage.</p>
+    </div>
+
+    <div class="full-screen-message hidden" id="no-gig-screen">
+      <h2>No active gig right now</h2>
+      <p>Start a gig from the console before starting the set.</p>
+      <button onclick="window.location.href='console.html'">Back to Console</button>
+    </div>
+
+    <div class="full-screen-message hidden" id="end-screen">
+      <h2>🎉 End of the set</h2>
+      <p id="end-screen-detail">You've swiped through everything in tonight's set.</p>
+      <button onclick="restartSet()">Start Over From the Top</button>
+      <button class="secondary" onclick="window.location.href='console.html'">Back to Console</button>
+    </div>
+  </div>
+
+  <footer id="progress-footer" class="hidden">
+    Song <span id="song-index">1</span> of <span id="song-count">1</span> · Page <span id="page-index">1</span> of <span id="page-count">1</span> · click/tap sides or use ← →
+  </footer>
+</div>
+
+<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script type="module">
+  import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+  const SUPABASE_URL = 'https://ykvpjeiakvgihpxektcf.supabase.co';
+  const SUPABASE_ANON_KEY = 'sb_publishable_g4w52upNnalAllmn8_8vRA_G6Hj-tlM';
+  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+  const topBar = document.getElementById('top-bar');
+  const songTitleEl = document.getElementById('song-title');
+  const songSubEl = document.getElementById('song-sub');
+  const playBadge = document.getElementById('play-badge');
+  const exitBtn = document.getElementById('exit-btn');
+  const canvas = document.getElementById('page-canvas');
+  const ctx = canvas.getContext('2d');
+  const zonePrev = document.getElementById('zone-prev');
+  const zoneNext = document.getElementById('zone-next');
+  const loadingScreen = document.getElementById('loading-screen');
+  const loadingDetail = document.getElementById('loading-detail');
+  const noGigScreen = document.getElementById('no-gig-screen');
+  const endScreen = document.getElementById('end-screen');
+  const progressFooter = document.getElementById('progress-footer');
+  const songIndexEl = document.getElementById('song-index');
+  const songCountEl = document.getElementById('song-count');
+  const pageIndexEl = document.getElementById('page-index');
+  const pageCountEl = document.getElementById('page-count');
+
+  let performer = null;
+  let gig = null;
+  let orderedSongs = [];   // songs in gig.runtime_order, in order, minus any that no longer exist
+  let pageStream = [];     // flat list: { song, pdf (proxy or null), pageNum, isFirstPageOfSong, isLastPageOfSong, loadError }
+  let currentIndex = 0;
+  let playCounts = {};     // song_id -> count of plays recorded so far tonight
+  let atEnd = false;
+
+  exitBtn.addEventListener('click', () => {
+    window.location.href = 'console.html';
+  });
+
+  window.restartSet = function () {
+    atEnd = false;
+    endScreen.classList.add('hidden');
+    goToIndex(0, { record: false });
+  };
+
+  async function init() {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      window.location.href = 'console.html';
+      return;
+    }
+
+    const { data: { user } } = await supabase.auth.getUser();
+    const { data: perf, error: perfError } = await supabase
+      .from('performers')
+      .select('id, handle, display_name')
+      .eq('auth_user_id', user.id)
+      .maybeSingle();
+    if (perfError || !perf) {
+      window.location.href = 'console.html';
+      return;
+    }
+    performer = perf;
+
+    const { data: gigData } = await supabase
+      .from('gig_sessions')
+      .select('id, gig_code, runtime_order, active_setlist_id, status')
+      .eq('performer_id', performer.id)
+      .eq('status', 'active')
+      .order('created_at', { ascending: false })
+      .maybeSingle();
+
+    if (!gigData || !gigData.runtime_order || gigData.runtime_order.length === 0) {
+      showOnly(noGigScreen);
+      return;
+    }
+    gig = gigData;
+
+    const { data: songRows } = await supabase
+      .from('songs')
+      .select('id, title, artist, song_key, key_with_capo, chart_url')
+      .eq('performer_id', performer.id)
+      .in('id', gig.runtime_order);
+
+    const songById = {};
+    (songRows || []).forEach(s => { songById[s.id] = s; });
+    orderedSongs = gig.runtime_order.map(id => songById[id]).filter(Boolean);
+
+    if (orderedSongs.length === 0) {
+      showOnly(noGigScreen);
+      return;
+    }
+
+    await loadExistingPlayCounts();
+    await buildPageStream();
+
+    if (pageStream.length === 0) {
+      loadingDetail.textContent = 'None of tonight\'s charts could be loaded.';
+      return;
+    }
+
+    topBar.classList.remove('hidden');
+    progressFooter.classList.remove('hidden');
+    canvas.classList.remove('hidden');
+    loadingScreen.classList.add('hidden');
+
+    goToIndex(0, { record: false });
+  }
+
+  function showOnly(screenEl) {
+    [loadingScreen, noGigScreen, endScreen].forEach(el => el.classList.add('hidden'));
+    screenEl.classList.remove('hidden');
+  }
+
+  async function loadExistingPlayCounts() {
+    const { data } = await supabase
+      .from('song_plays')
+      .select('song_id')
+      .eq('gig_session_id', gig.id);
+    playCounts = {};
+    (data || []).forEach(row => {
+      playCounts[row.song_id] = (playCounts[row.song_id] || 0) + 1;
+    });
+  }
+
+  async function buildPageStream() {
+    pageStream = [];
+    for (let i = 0; i < orderedSongs.length; i++) {
+      const song = orderedSongs[i];
+      loadingDetail.textContent = `Loading chart ${i + 1} of ${orderedSongs.length}: ${song.title}…`;
+      try {
+        const loadingTask = window.pdfjsLib.getDocument(song.chart_url);
+        const pdf = await loadingTask.promise;
+        for (let p = 1; p <= pdf.numPages; p++) {
+          pageStream.push({
+            song,
+            pdf,
+            pageNum: p,
+            isFirstPageOfSong: p === 1,
+            isLastPageOfSong: p === pdf.numPages,
+          });
+        }
+      } catch (err) {
+        console.error(`Could not load chart for "${song.title}"`, err);
+        pageStream.push({
+          song,
+          pdf: null,
+          pageNum: 1,
+          isFirstPageOfSong: true,
+          isLastPageOfSong: true,
+          loadError: err && err.message ? err.message : 'Could not load this chart.',
+        });
+      }
+    }
+  }
+
+  async function renderCurrentPage() {
+    const entry = pageStream[currentIndex];
+    if (!entry) return;
+
+    songTitleEl.textContent = entry.song.title;
+    const keyBits = [];
+    if (entry.song.song_key) keyBits.push(entry.song.song_key);
+    if (entry.song.key_with_capo && !/^\s*no capo\s*$/i.test(entry.song.key_with_capo)) {
+      keyBits.push(entry.song.key_with_capo);
+    }
+    songSubEl.textContent = [entry.song.artist, keyBits.join(' · ')].filter(Boolean).join(' — ') || '—';
+
+    const count = playCounts[entry.song.id] || 0;
+    if (count > 0) {
+      playBadge.textContent = `played ${count}x tonight`;
+      playBadge.classList.remove('hidden');
+    } else {
+      playBadge.classList.add('hidden');
+    }
+
+    const songIdx = orderedSongs.findIndex(s => s.id === entry.song.id);
+    songIndexEl.textContent = songIdx + 1;
+    songCountEl.textContent = orderedSongs.length;
+    pageIndexEl.textContent = entry.pageNum;
+    pageCountEl.textContent = entry.pdf ? entry.pdf.numPages : 1;
+
+    zonePrev.classList.toggle('disabled', currentIndex === 0);
+
+    if (entry.loadError) {
+      canvas.classList.add('hidden');
+      loadingScreen.classList.remove('hidden');
+      loadingScreen.querySelector('.spinner').classList.add('hidden');
+      loadingDetail.innerHTML = `Couldn't load the chart for <strong>${escapeHtml(entry.song.title)}</strong>.<br><span style="color:var(--danger);font-size:0.8rem;">${escapeHtml(entry.loadError)}</span><br><br>Use the arrows or click the sides to skip ahead.`;
+      return;
+    }
+    loadingScreen.classList.add('hidden');
+    canvas.classList.remove('hidden');
+    loadingScreen.querySelector('.spinner').classList.remove('hidden');
+
+    const page = await entry.pdf.getPage(entry.pageNum);
+    const stageEl = document.getElementById('stage');
+    const availableWidth = stageEl.clientWidth * 0.92;
+    const availableHeight = stageEl.clientHeight * 0.94;
+    const baseViewport = page.getViewport({ scale: 1 });
+    const scale = Math.min(availableWidth / baseViewport.width, availableHeight / baseViewport.height);
+    const viewport = page.getViewport({ scale: Math.max(scale, 0.1) });
+
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    await page.render({ canvasContext: ctx, viewport }).promise;
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str ?? '';
+    return div.innerHTML;
+  }
+
+  async function recordPlay(songId) {
+    playCounts[songId] = (playCounts[songId] || 0) + 1;
+    try {
+      await supabase.from('song_plays').insert({ gig_session_id: gig.id, song_id: songId });
+    } catch (err) {
+      console.error('Could not record play', err);
+      // Not fatal to the live performance — the performer keeps moving either way.
+    }
+  }
+
+  async function goToIndex(newIndex, opts) {
+    const options = opts || { record: true };
+    if (newIndex < 0) return;
+
+    if (newIndex >= pageStream.length) {
+      // Reached the very end — the last page's song still counts as played.
+      const leaving = pageStream[currentIndex];
+      if (options.record !== false && leaving && leaving.isLastPageOfSong && !leaving.loadError) {
+        await recordPlay(leaving.song.id);
+      }
+      atEnd = true;
+      showOnly(endScreen);
+      return;
+    }
+
+    if (options.record !== false && newIndex > currentIndex) {
+      const leaving = pageStream[currentIndex];
+      const entering = pageStream[newIndex];
+      if (leaving && !leaving.loadError && leaving.isLastPageOfSong && entering.song.id !== leaving.song.id) {
+        await recordPlay(leaving.song.id);
+      }
+    }
+
+    currentIndex = newIndex;
+    await renderCurrentPage();
+  }
+
+  function nextPage() {
+    if (atEnd) return;
+    goToIndex(currentIndex + 1);
+  }
+  function prevPage() {
+    if (atEnd) return;
+    goToIndex(currentIndex - 1, { record: false });
+  }
+
+  zoneNext.addEventListener('click', nextPage);
+  zonePrev.addEventListener('click', prevPage);
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight') nextPage();
+    if (e.key === 'ArrowLeft') prevPage();
+  });
+
+  let resizeTimer;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => { if (!atEnd) renderCurrentPage(); }, 150);
+  });
+
+  init();
+</script>
+
+</body>
+</html>
