@@ -539,7 +539,7 @@
   async function loadActiveGig() {
     const { data } = await supabase
       .from('gig_sessions')
-      .select('id, gig_code, active_setlist_id, status, created_at')
+      .select('id, gig_code, active_setlist_id, runtime_order, status, created_at')
       .eq('performer_id', performer.id)
       .eq('status', 'active')
       .order('created_at', { ascending: false })
