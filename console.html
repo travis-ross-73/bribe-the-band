@@ -521,7 +521,7 @@
   async function loadSongs() {
     const { data } = await supabase
       .from('songs')
-      .select('id, title, artist, chart_url, song_key, key_with_capo')
+      .select('id, title, artist, chart_url, song_key, key_with_capo, max_requests_per_gig')
       .eq('performer_id', performer.id)
       .order('title');
     songs = data || [];
@@ -1201,6 +1201,7 @@
           <input type="text" data-field="artist" value="${escapeHtml(s.artist)}" placeholder="Artist" />
           <input type="text" data-field="song_key" value="${escapeHtml(s.song_key || '')}" placeholder="Key" />
           <input type="text" data-field="key_with_capo" value="${escapeHtml(s.key_with_capo || '')}" placeholder="Key with capo" />
+          <input type="number" min="1" step="1" data-field="max_requests_per_gig" value="${s.max_requests_per_gig ?? ''}" placeholder="Max requests/gig (blank = no limit)" />
         </div>
         <div class="row-bottom">
           <div class="chart-link"><a href="${chartLinkHref(s.chart_url)}" target="_blank" rel="noopener" data-chart-link>View current PDF</a></div>
@@ -1227,6 +1228,7 @@
         const artist = row.querySelector('[data-field="artist"]').value.trim();
         const songKey = row.querySelector('[data-field="song_key"]').value.trim();
         const capo = row.querySelector('[data-field="key_with_capo"]').value.trim();
+        const maxRequestsRaw = row.querySelector('[data-field="max_requests_per_gig"]').value.trim();
         const fileInput = row.querySelector('[data-replace-pdf]');
         const replacementFile = fileInput.files && fileInput.files[0];
 
@@ -1239,7 +1241,11 @@
           title,
           artist,
           song_key: songKey || null,
-          key_with_capo: capo || null
+          key_with_capo: capo || null,
+          // Nightly cap on how many times this song can be requested per gig
+          // (not how many times it's actually played) — blank means no limit.
+          // Enforced on the crowd request page via get_song_request_status().
+          max_requests_per_gig: maxRequestsRaw ? parseInt(maxRequestsRaw, 10) : null
         };
 
         try {

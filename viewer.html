@@ -419,7 +419,7 @@
   let orderedSongs = [];   // songs in gig.runtime_order, in order, minus any that no longer exist
   let pageStream = [];     // flat list: { song, pdf (proxy or null), pageNum, isFirstPageOfSong, isLastPageOfSong, loadError }
   let currentIndex = 0;
-  let playCounts = {};     // song_id -> count of plays recorded so far tonight
+  let requestCounts = {};  // song_id -> raw count of pending+accepted requests tonight (performer-facing only)
   let atEnd = false;
   let viewerReady = false; // true once the set has loaded and swipe/tap navigation should respond
   let chromeHideTimer = null;
@@ -521,7 +521,7 @@
       return;
     }
 
-    await loadExistingPlayCounts();
+    await loadRequestCounts();
     await buildPageStream();
 
     if (pageStream.length === 0) {
@@ -547,14 +547,28 @@
     screenEl.classList.remove('hidden');
   }
 
-  async function loadExistingPlayCounts() {
+  // Raw (not deduped) count of pending+accepted requests per song tonight —
+  // shown in the header as "requested Nx tonight" purely for the performer's
+  // own reference. This replaced an earlier swipe-based "played Nx tonight"
+  // badge that counted every forward page-turn as a "play," which inflated
+  // whenever the performer flipped ahead to preview upcoming charts and then
+  // came back — there's no reliable way to tell a preview from an actual
+  // performance from swipe direction alone, so that approach was dropped in
+  // favor of tracking actual requests instead, which don't have that
+  // ambiguity. Deliberately NOT deduped the way the crowd-facing request cap
+  // is (see fetchSongsByIds/get_song_request_status on the crowd page) — this
+  // is just "how many times has this been asked for," raw.
+  async function loadRequestCounts() {
+    if (!gig) return;
     const { data } = await supabase
-      .from('song_plays')
-      .select('song_id')
-      .eq('gig_session_id', gig.id);
-    playCounts = {};
+      .from('requests')
+      .select('song_id, status')
+      .eq('gig_session_id', gig.id)
+      .in('status', ['pending', 'accepted']);
+    requestCounts = {};
     (data || []).forEach(row => {
-      playCounts[row.song_id] = (playCounts[row.song_id] || 0) + 1;
+      if (!row.song_id) return;
+      requestCounts[row.song_id] = (requestCounts[row.song_id] || 0) + 1;
     });
   }
 
@@ -601,9 +615,9 @@
     }
     songSubEl.textContent = [entry.song.artist, keyBits.join(' · ')].filter(Boolean).join(' — ') || '—';
 
-    const count = playCounts[entry.song.id] || 0;
+    const count = requestCounts[entry.song.id] || 0;
     if (count > 0) {
-      playBadge.textContent = `played ${count}x tonight`;
+      playBadge.textContent = `requested ${count}x tonight`;
       playBadge.classList.remove('hidden');
     } else {
       playBadge.classList.add('hidden');
@@ -726,6 +740,21 @@
     requestBadgeCountEl.textContent = pendingRequests.length;
     requestBadge.classList.toggle('hidden', pendingRequests.length === 0);
     if (drawerOpen) renderDrawerList();
+
+    // Piggyback the "requested Nx tonight" header badge on the same
+    // page-turn/interval trigger as the pending-requests check, since
+    // they're both cheap reads of the same table.
+    await loadRequestCounts();
+    const entry = pageStream[currentIndex];
+    if (entry) {
+      const count = requestCounts[entry.song.id] || 0;
+      if (count > 0) {
+        playBadge.textContent = `requested ${count}x tonight`;
+        playBadge.classList.remove('hidden');
+      } else {
+        playBadge.classList.add('hidden');
+      }
+    }
   }
 
   function renderDrawerList() {
@@ -814,6 +843,17 @@
 
     if (error || !data || data.length === 0) return;
 
+    // Multiple people can request the same song in the same batch — the
+    // performer only plays it once, so group rows by song_id and splice
+    // each unique song into the set exactly once. Every row in the group
+    // still gets marked spliced (with the SAME timestamp) so the "occasions
+    // used" cap-counting SQL sees them as one occasion, not several.
+    const bySong = new Map();
+    for (const row of data) {
+      if (!bySong.has(row.song_id)) bySong.set(row.song_id, []);
+      bySong.get(row.song_id).push(row);
+    }
+
     const songMap = await fetchSongsByIds(data.map(r => r.song_id));
 
     const wasAtEnd = atEnd;
@@ -824,12 +864,13 @@
       : orderedSongs.length;
     const addedTitles = [];
 
-    for (const row of data) {
-      const song = songMap[row.song_id];
+    for (const [songId, rows] of bySong.entries()) {
+      const splicedAt = new Date().toISOString();
+      const song = songMap[songId];
       if (!song) {
         // The song was deleted from the catalog after being requested —
-        // nothing to splice, just close the row out so it's not retried.
-        await supabase.from('requests').update({ spliced_at: new Date().toISOString() }).eq('id', row.id);
+        // nothing to splice, just close the rows out so they're not retried.
+        await supabase.from('requests').update({ spliced_at: splicedAt }).in('id', rows.map(r => r.id));
         continue;
       }
 
@@ -851,9 +892,9 @@
       insertAt += newEntries.length;
       orderedSongs.splice(songInsertAt, 0, song);
       songInsertAt += 1;
-      addedTitles.push(song.title);
+      addedTitles.push(rows.length > 1 ? `${song.title} (x${rows.length} requests)` : song.title);
 
-      await supabase.from('requests').update({ spliced_at: new Date().toISOString() }).eq('id', row.id);
+      await supabase.from('requests').update({ spliced_at: splicedAt }).in('id', rows.map(r => r.id));
     }
 
     if (addedTitles.length === 0) return;
@@ -880,18 +921,7 @@
   requestBadge.addEventListener('click', openDrawer);
   drawerCloseBtn.addEventListener('click', closeDrawer);
 
-  async function recordPlay(songId) {
-    playCounts[songId] = (playCounts[songId] || 0) + 1;
-    try {
-      await supabase.from('song_plays').insert({ gig_session_id: gig.id, song_id: songId });
-    } catch (err) {
-      console.error('Could not record play', err);
-      // Not fatal to the live performance — the performer keeps moving either way.
-    }
-  }
-
   async function goToIndex(newIndex, opts) {
-    const options = opts || { record: true };
     if (newIndex < 0) return;
 
     // Cheap, fire-and-forget: check for new requests on every page turn,
@@ -900,22 +930,9 @@
     refreshPendingRequests();
 
     if (newIndex >= pageStream.length) {
-      // Reached the very end — the last page's song still counts as played.
-      const leaving = pageStream[currentIndex];
-      if (options.record !== false && leaving && leaving.isLastPageOfSong && !leaving.loadError) {
-        await recordPlay(leaving.song.id);
-      }
       atEnd = true;
       showOnly(endScreen);
       return;
-    }
-
-    if (options.record !== false && newIndex > currentIndex) {
-      const leaving = pageStream[currentIndex];
-      const entering = pageStream[newIndex];
-      if (leaving && !leaving.loadError && leaving.isLastPageOfSong && entering.song.id !== leaving.song.id) {
-        await recordPlay(leaving.song.id);
-      }
     }
 
     currentIndex = newIndex;
@@ -928,7 +945,7 @@
   }
   function prevPage() {
     if (atEnd) return;
-    goToIndex(currentIndex - 1, { record: false });
+    goToIndex(currentIndex - 1);
   }
 
   // Unified pointer handling for the whole stage, branching on pointerType:

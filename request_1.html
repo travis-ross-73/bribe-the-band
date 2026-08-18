@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Bribe The Band</title>
+<link rel="manifest" href="/manifest.json" />
+<style>
+  :root {
+    --bg: #12141c;
+    --card: #1b1e2b;
+    --accent: #f2b134;
+    --accent-dark: #d99a1f;
+    --text: #f4f4f6;
+    --muted: #9a9db0;
+    --success: #4caf7d;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+  header {
+    padding: 28px 20px 16px;
+    text-align: center;
+  }
+  header h1 {
+    margin: 0;
+    font-size: 1.8rem;
+    letter-spacing: -0.02em;
+  }
+  header p {
+    margin: 6px 0 0;
+    color: var(--muted);
+    font-size: 0.95rem;
+  }
+  main {
+    max-width: 560px;
+    margin: 0 auto;
+    padding: 0 16px 40px;
+  }
+  #status-banner {
+    background: var(--card);
+    border: 1px solid #2a2e40;
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 16px;
+    color: var(--muted);
+    font-size: 0.9rem;
+    text-align: center;
+  }
+  #tip-only-card {
+    background: linear-gradient(135deg, #2a2415, var(--card));
+    border: 1px solid var(--accent-dark);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 18px;
+    text-align: center;
+  }
+  #tip-only-card p {
+    margin: 0 0 10px;
+    font-size: 0.92rem;
+    color: var(--text);
+  }
+  #tip-only-btn {
+    background: var(--accent);
+    color: #12141c;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 18px;
+    font-weight: 700;
+    font-size: 0.95rem;
+    cursor: pointer;
+  }
+  #search {
+    width: 100%;
+    padding: 12px 14px;
+    border-radius: 10px;
+    border: 1px solid #2a2e40;
+    background: var(--card);
+    color: var(--text);
+    font-size: 1rem;
+    margin-bottom: 16px;
+  }
+  #search:focus { outline: 2px solid var(--accent); }
+  .song-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .song-row {
+    background: var(--card);
+    border: 1px solid #2a2e40;
+    border-radius: 10px;
+    padding: 14px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .song-row:hover { border-color: var(--accent); }
+  .song-row.selected { border-color: var(--accent); background: #232741; }
+  .song-row.capped { cursor: default; opacity: 0.5; }
+  .song-row.capped:hover { border-color: #2a2e40; }
+  .song-title { font-weight: 600; font-size: 1rem; }
+  .song-artist { color: var(--muted); font-size: 0.85rem; margin-top: 2px; }
+  .req-arrow { color: var(--accent); font-size: 1.3rem; font-weight: 700; }
+  .capped-note { color: var(--accent); font-size: 0.78rem; margin-top: 3px; font-weight: 600; }
+
+  #request-panel {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    background: var(--card);
+    border-top: 1px solid #2a2e40;
+    padding: 18px 20px calc(18px + env(safe-area-inset-bottom));
+    transform: translateY(105%);
+    transition: transform 0.25s ease;
+    box-shadow: 0 -8px 24px rgba(0,0,0,0.4);
+  }
+  #request-panel.open { transform: translateY(0); }
+  #request-panel h2 { margin: 0 0 4px; font-size: 1.1rem; }
+  #request-panel .subtitle { color: var(--muted); font-size: 0.85rem; margin-bottom: 14px; }
+  .tip-options {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+  .tip-btn {
+    flex: 1;
+    min-width: 60px;
+    padding: 10px 0;
+    border-radius: 8px;
+    border: 1px solid #2a2e40;
+    background: #12141c;
+    color: var(--text);
+    font-size: 0.95rem;
+    cursor: pointer;
+  }
+  .tip-btn.selected { background: var(--accent); color: #12141c; border-color: var(--accent); font-weight: 700; }
+  #custom-tip-wrap {
+    margin-bottom: 12px;
+  }
+  #custom-tip-input {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--accent);
+    background: #12141c;
+    color: var(--text);
+    font-size: 0.95rem;
+  }
+  #note-input {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid #2a2e40;
+    background: #12141c;
+    color: var(--text);
+    font-size: 0.95rem;
+    margin-bottom: 6px;
+  }
+  #submit-request {
+    width: 100%;
+    padding: 14px 0;
+    border-radius: 10px;
+    border: none;
+    background: var(--accent);
+    color: #12141c;
+    font-weight: 700;
+    font-size: 1.05rem;
+    cursor: pointer;
+    margin-top: 8px;
+  }
+  #submit-request:disabled { opacity: 0.5; cursor: default; }
+  #cancel-request {
+    display: block;
+    text-align: center;
+    margin-top: 10px;
+    color: var(--muted);
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+  #confirmation {
+    text-align: center;
+    padding: 60px 20px;
+  }
+  #confirmation h2 { color: var(--success); }
+  #confirmation .countdown { color: var(--muted); font-size: 0.9rem; margin-top: 18px; }
+  .hidden { display: none !important; }
+  .note-hint { color: var(--muted); font-size: 0.75rem; margin: 0 0 12px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🎤 Bribe The Band</h1>
+  <p>Pick a song, add a tip, make it happen.</p>
+</header>
+
+<main>
+  <div id="status-banner">Loading songs…</div>
+
+  <div id="tip-only-card">
+    <p>Like what you've heard so far? Leave a tip without a request!</p>
+    <button id="tip-only-btn">Leave a Tip</button>
+  </div>
+
+  <input type="text" id="search" placeholder="Search songs or artists…" />
+  <div class="song-list" id="song-list"></div>
+</main>
+
+<div id="request-panel">
+  <h2 id="panel-song-title">Song Title</h2>
+  <div class="subtitle" id="panel-song-artist">Artist</div>
+
+  <div class="tip-options" id="tip-options">
+    <button class="tip-btn" data-amount="2">$2</button>
+    <button class="tip-btn" data-amount="5">$5</button>
+    <button class="tip-btn" data-amount="10">$10</button>
+    <button class="tip-btn" data-amount="custom">Custom</button>
+    <button class="tip-btn" data-amount="0">No Tip</button>
+  </div>
+
+  <div id="custom-tip-wrap" class="hidden">
+    <input type="number" min="1" step="1" id="custom-tip-input" placeholder="$ amount" />
+  </div>
+
+  <input type="text" id="note-input" placeholder='e.g. &quot;For Sarah&quot; or &quot;Happy Birthday to Eric!&quot;' maxlength="120" />
+  <div class="note-hint">Add a note (optional) — dedicate it to someone, request an occasion, whatever you'd like.</div>
+
+  <button id="submit-request">Send Request</button>
+  <div id="cancel-request">Cancel</div>
+</div>
+
+<div id="confirmation" class="hidden">
+  <h2 id="confirmation-title">Request sent! 🎶</h2>
+  <p id="confirmation-subtitle">The band has your request — thanks for the tip!</p>
+  <div class="countdown" id="countdown-text"></div>
+</div>
+
+<script type="module">
+  import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+  // --- Config ---------------------------------------------------------
+  const SUPABASE_URL = 'https://ykvpjeiakvgihpxektcf.supabase.co';
+  const SUPABASE_ANON_KEY = 'sb_publishable_g4w52upNnalAllmn8_8vRA_G6Hj-tlM';
+  // Performer handle comes from the URL path: bribetheband.live/travis-ross
+  // (routed here via vercel.json's rewrite). Falls back to 'travis-ross' if
+  // this file is opened directly with no path segment, e.g. while testing.
+  const pathHandle = window.location.pathname.replace(/^\/+|\/+$/g, '');
+  const PERFORMER_HANDLE = pathHandle || 'travis-ross';
+  // Static URL by design (see decisions log): this page always shows whichever
+  // gig the performer has marked active in the Console — no ?gig= code needed
+  // for the audience link/QR code. An explicit ?gig=CODE in the URL still
+  // works as an override, mainly useful for testing a specific gig session.
+  const params = new URLSearchParams(window.location.search);
+  const gigCodeOverride = params.get('gig');
+
+  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  // --- State ------------------------------------------------------------
+  let songs = [];
+  let gigSession = null;
+  let selectedSong = null; // null when this is a tip-only request
+  let selectedTip = null;  // number, or 'custom'
+  let isTipOnly = false;
+  let cappedSongIds = new Set(); // song ids that have hit their nightly request cap
+  const CAP_POLL_MS = 30000;
+
+  const statusBanner = document.getElementById('status-banner');
+  const tipOnlyCard = document.getElementById('tip-only-card');
+  const tipOnlyBtn = document.getElementById('tip-only-btn');
+  const songListEl = document.getElementById('song-list');
+  const searchEl = document.getElementById('search');
+  const panel = document.getElementById('request-panel');
+  const panelTitle = document.getElementById('panel-song-title');
+  const panelArtist = document.getElementById('panel-song-artist');
+  const tipOptions = document.getElementById('tip-options');
+  const customTipWrap = document.getElementById('custom-tip-wrap');
+  const customTipInput = document.getElementById('custom-tip-input');
+  const noteInput = document.getElementById('note-input');
+  const submitBtn = document.getElementById('submit-request');
+  const cancelBtn = document.getElementById('cancel-request');
+  const confirmation = document.getElementById('confirmation');
+  const confirmationTitle = document.getElementById('confirmation-title');
+  const confirmationSubtitle = document.getElementById('confirmation-subtitle');
+  const countdownText = document.getElementById('countdown-text');
+  const mainEl = document.querySelector('main');
+
+  async function init() {
+    let gigQuery = supabase
+      .from('gig_sessions')
+      .select('id, gig_code, status, performer_id')
+      .eq('status', 'active');
+
+    if (gigCodeOverride) {
+      // Explicit ?gig=CODE in the URL — used for testing a specific session
+      gigQuery = gigQuery.eq('gig_code', gigCodeOverride);
+    } else {
+      // Default, static-URL behavior: whichever gig is active for this performer
+      const { data: performerData } = await supabase
+        .from('performers')
+        .select('id')
+        .eq('handle', PERFORMER_HANDLE)
+        .maybeSingle();
+      if (!performerData) {
+        statusBanner.textContent = 'Could not find this performer. Please try again later.';
+        tipOnlyCard.classList.add('hidden');
+        return;
+      }
+      gigQuery = gigQuery.eq('performer_id', performerData.id).order('created_at', { ascending: false });
+    }
+
+    const { data: gigData, error: gigError } = await gigQuery.limit(1).maybeSingle();
+
+    if (gigError || !gigData) {
+      statusBanner.textContent = 'No active gig right now — check back when the show starts!';
+      tipOnlyCard.classList.add('hidden');
+      return;
+    }
+    gigSession = gigData;
+
+    const { data: songData, error: songError } = await supabase
+      .from('songs')
+      .select('id, title, artist, song_key, key_with_capo, chart_url')
+      .eq('performer_id', gigSession.performer_id)
+      .order('title');
+
+    if (songError) {
+      statusBanner.textContent = 'Could not load songs. Please try again.';
+      console.error(songError);
+      return;
+    }
+
+    songs = songData;
+    statusBanner.classList.add('hidden');
+    await refreshCapStatus();
+    renderSongs(songs);
+    setInterval(refreshCapStatus, CAP_POLL_MS);
+  }
+
+  // Asks the DB (via a SECURITY DEFINER function, since anon users can't
+  // read raw `requests` rows) which songs have already hit the nightly
+  // request cap the performer set in the console. Blank/no cap = never capped.
+  async function refreshCapStatus() {
+    if (!gigSession) return;
+    const { data, error } = await supabase.rpc('get_song_request_status', {
+      p_gig_session_id: gigSession.id
+    });
+    if (error) {
+      console.error('Could not load request-cap status', error);
+      return;
+    }
+    const nextCapped = new Set();
+    (data || []).forEach(row => {
+      if (row.is_capped) nextCapped.add(row.song_id);
+    });
+    const changed = nextCapped.size !== cappedSongIds.size ||
+      [...nextCapped].some(id => !cappedSongIds.has(id));
+    cappedSongIds = nextCapped;
+    if (changed) {
+      // Re-render with whatever filter the user currently has typed.
+      const q = searchEl.value.trim().toLowerCase();
+      const filtered = q
+        ? songs.filter(s => s.title.toLowerCase().includes(q) || s.artist.toLowerCase().includes(q))
+        : songs;
+      renderSongs(filtered);
+      // If the panel is open for a song that just got capped out from under
+      // the user, close it rather than let them submit into a dead end.
+      if (selectedSong && cappedSongIds.has(selectedSong.id) && panel.classList.contains('open')) {
+        panel.classList.remove('open');
+      }
+    }
+  }
+
+  function renderSongs(list) {
+    songListEl.innerHTML = '';
+    if (list.length === 0) {
+      songListEl.innerHTML = '<div style="color:var(--muted); text-align:center; padding:20px;">No songs match your search.</div>';
+      return;
+    }
+    for (const song of list) {
+      const row = document.createElement('div');
+      const capped = cappedSongIds.has(song.id);
+      row.className = capped ? 'song-row capped' : 'song-row';
+      row.innerHTML = `
+        <div>
+          <div class="song-title">${escapeHtml(song.title)}</div>
+          <div class="song-artist">${escapeHtml(song.artist)}</div>
+          ${capped ? '<div class="capped-note">Already requested plenty tonight — try another! 🎶</div>' : ''}
+        </div>
+        <div class="req-arrow">${capped ? '' : '+'}</div>
+      `;
+      if (!capped) {
+        row.addEventListener('click', () => openRequestPanel(song));
+      }
+      songListEl.appendChild(row);
+    }
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str ?? '';
+    return div.innerHTML;
+  }
+
+  searchEl.addEventListener('input', () => {
+    const q = searchEl.value.trim().toLowerCase();
+    const filtered = songs.filter(s =>
+      s.title.toLowerCase().includes(q) || s.artist.toLowerCase().includes(q)
+    );
+    renderSongs(filtered);
+  });
+
+  function resetPanelState() {
+    selectedTip = null;
+    noteInput.value = '';
+    customTipInput.value = '';
+    customTipWrap.classList.add('hidden');
+    [...tipOptions.children].forEach(btn => btn.classList.remove('selected'));
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Send Request';
+  }
+
+  function openRequestPanel(song) {
+    selectedSong = song;
+    isTipOnly = false;
+    panelTitle.textContent = song.title;
+    panelArtist.textContent = song.artist;
+    resetPanelState();
+    panel.classList.add('open');
+  }
+
+  tipOnlyBtn.addEventListener('click', () => {
+    selectedSong = null;
+    isTipOnly = true;
+    panelTitle.textContent = 'Leave a Tip';
+    panelArtist.textContent = "No request — just showing some love";
+    resetPanelState();
+    panel.classList.add('open');
+  });
+
+  tipOptions.addEventListener('click', (e) => {
+    const btn = e.target.closest('.tip-btn');
+    if (!btn) return;
+    [...tipOptions.children].forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+
+    if (btn.dataset.amount === 'custom') {
+      selectedTip = 'custom';
+      customTipWrap.classList.remove('hidden');
+      customTipInput.focus();
+      submitBtn.disabled = !(parseFloat(customTipInput.value) > 0);
+    } else {
+      selectedTip = parseFloat(btn.dataset.amount);
+      customTipWrap.classList.add('hidden');
+      submitBtn.disabled = false;
+    }
+  });
+
+  customTipInput.addEventListener('input', () => {
+    submitBtn.disabled = !(parseFloat(customTipInput.value) > 0);
+  });
+
+  cancelBtn.addEventListener('click', () => {
+    panel.classList.remove('open');
+  });
+
+  function currentTipAmount() {
+    if (selectedTip === 'custom') return parseFloat(customTipInput.value) || 0;
+    return selectedTip || 0;
+  }
+
+  submitBtn.addEventListener('click', async () => {
+    if (selectedTip === null || !gigSession) return;
+    if (selectedTip === 'custom' && !(parseFloat(customTipInput.value) > 0)) return;
+
+    // Last-second safety check: the song could have hit its cap in the
+    // moments between opening this panel and hitting Send.
+    if (selectedSong) {
+      await refreshCapStatus();
+      if (cappedSongIds.has(selectedSong.id)) {
+        panel.classList.remove('open');
+        alert(`Looks like "${selectedSong.title}" has already been requested plenty tonight — try another song!`);
+        return;
+      }
+    }
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Sending…';
+
+    const { error } = await supabase.from('requests').insert({
+      gig_session_id: gigSession.id,
+      song_id: selectedSong ? selectedSong.id : null,
+      tip_amount: currentTipAmount(),
+      note: noteInput.value.trim() || null,
+      status: 'pending'
+    });
+
+    if (error) {
+      console.error(error);
+      submitBtn.textContent = 'Send Request';
+      submitBtn.disabled = false;
+      alert('Something went wrong sending your request. Please try again.');
+      return;
+    }
+
+    panel.classList.remove('open');
+    showConfirmation();
+  });
+
+  function showConfirmation() {
+    if (isTipOnly) {
+      confirmationTitle.textContent = 'Tip sent! 🎶';
+      confirmationSubtitle.textContent = 'Thanks so much for the support!';
+    } else {
+      confirmationTitle.textContent = 'Request sent! 🎶';
+      confirmationSubtitle.textContent = 'The band has your request — thanks!';
+    }
+    mainEl.classList.add('hidden');
+    tipOnlyCard.classList.add('hidden');
+    confirmation.classList.remove('hidden');
+
+    let secondsLeft = 5;
+    countdownText.textContent = `Returning to the song list in ${secondsLeft}…`;
+    const interval = setInterval(() => {
+      secondsLeft -= 1;
+      if (secondsLeft <= 0) {
+        clearInterval(interval);
+        confirmation.classList.add('hidden');
+        mainEl.classList.remove('hidden');
+        tipOnlyCard.classList.remove('hidden');
+      } else {
+        countdownText.textContent = `Returning to the song list in ${secondsLeft}…`;
+      }
+    }, 1000);
+  }
+
+  init();
+</script>
+
+</body>
+</html>
