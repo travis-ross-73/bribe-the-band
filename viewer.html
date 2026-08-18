@@ -427,7 +427,13 @@
   let pendingRequests = [];       // requests with status 'pending' for tonight's gig
   let drawerOpen = false;
   let requestPollTimer = null;
-  const REQUEST_POLL_MS = 15000;
+  // A page turn already triggers a check (see goToIndex), which covers the
+  // common case for free — this timer is just a safety net for when the
+  // performer lingers on one page for a while (a long song, a long chart).
+  // 45s keeps that background check cheap rather than a tight battery-
+  // draining loop, since the real-time-feeling part comes from the
+  // per-page-turn check, not this interval.
+  const REQUEST_POLL_MS = 45000;
 
   // Header/footer behave like Apple Books' top bar: visible briefly, then
   // fade away so the chart can fill the whole screen, reappearing on a tap
@@ -676,11 +682,35 @@
   // they're accepted — so several can be accepted in a row and they land
   // in the set in the order they were accepted.
 
+  // Looks up song rows by id in one batch, rather than relying on Supabase's
+  // FK-embedding shorthand (requests.select('...songs(...)')) — that
+  // shorthand needs PostgREST to recognize a foreign-key relationship
+  // between requests.song_id and songs.id, which isn't reliably configured
+  // here (the console's own request queue avoids it for the same reason,
+  // doing its own local song lookup instead). Using the embed silently
+  // errored out on every call, which is why the badge/drawer never showed
+  // anything — not a timing/refresh problem, a query problem.
+  async function fetchSongsByIds(ids) {
+    const uniqueIds = [...new Set((ids || []).filter(Boolean))];
+    if (uniqueIds.length === 0) return {};
+    const { data, error } = await supabase
+      .from('songs')
+      .select('id, title, artist, song_key, key_with_capo, chart_url')
+      .in('id', uniqueIds);
+    if (error) {
+      console.error('Could not load song details for requests', error);
+      return {};
+    }
+    const map = {};
+    (data || []).forEach(s => { map[s.id] = s; });
+    return map;
+  }
+
   async function refreshPendingRequests() {
     if (!gig) return;
     const { data, error } = await supabase
       .from('requests')
-      .select('id, song_id, tip_amount, note, created_at, songs(id, title, artist, song_key, key_with_capo, chart_url)')
+      .select('id, song_id, tip_amount, note, created_at')
       .eq('gig_session_id', gig.id)
       .eq('status', 'pending')
       .order('tip_amount', { ascending: false })
@@ -691,7 +721,8 @@
       return;
     }
 
-    pendingRequests = data || [];
+    const songMap = await fetchSongsByIds((data || []).map(r => r.song_id));
+    pendingRequests = (data || []).map(r => ({ ...r, songs: songMap[r.song_id] || null }));
     requestBadgeCountEl.textContent = pendingRequests.length;
     requestBadge.classList.toggle('hidden', pendingRequests.length === 0);
     if (drawerOpen) renderDrawerList();
@@ -775,13 +806,15 @@
   async function spliceAcceptedRequests() {
     const { data, error } = await supabase
       .from('requests')
-      .select('id, song_id, songs(id, title, artist, song_key, key_with_capo, chart_url)')
+      .select('id, song_id')
       .eq('gig_session_id', gig.id)
       .eq('status', 'accepted')
       .is('spliced_at', null)
       .order('created_at', { ascending: true });
 
     if (error || !data || data.length === 0) return;
+
+    const songMap = await fetchSongsByIds(data.map(r => r.song_id));
 
     const wasAtEnd = atEnd;
     const currentEntry = pageStream[currentIndex];
@@ -792,7 +825,7 @@
     const addedTitles = [];
 
     for (const row of data) {
-      const song = row.songs;
+      const song = songMap[row.song_id];
       if (!song) {
         // The song was deleted from the catalog after being requested —
         // nothing to splice, just close the row out so it's not retried.
@@ -860,6 +893,11 @@
   async function goToIndex(newIndex, opts) {
     const options = opts || { record: true };
     if (newIndex < 0) return;
+
+    // Cheap, fire-and-forget: check for new requests on every page turn,
+    // since that's the moment the performer is naturally glancing at the
+    // screen anyway. No need to await it — it shouldn't hold up navigation.
+    refreshPendingRequests();
 
     if (newIndex >= pageStream.length) {
       // Reached the very end — the last page's song still counts as played.
