@@ -28,17 +28,29 @@
     overflow: hidden;
   }
 
-  #app { display: flex; flex-direction: column; height: 100%; }
+  #app { position: relative; height: 100%; overflow: hidden; }
 
   header {
-    flex-shrink: 0;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 20;
     padding: calc(10px + env(safe-area-inset-top)) calc(14px + env(safe-area-inset-right)) 10px calc(14px + env(safe-area-inset-left));
     display: flex;
     justify-content: space-between;
     align-items: center;
     border-bottom: 1px solid #232741;
-    background: var(--card);
+    background: rgba(27, 30, 43, 0.88);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     gap: 10px;
+    transition: opacity 0.25s ease, transform 0.25s ease;
+  }
+  header.chrome-hidden {
+    opacity: 0;
+    transform: translateY(-8px);
+    pointer-events: none;
   }
   .song-info { min-width: 0; }
   .song-info .title { font-weight: 700; font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -65,9 +77,8 @@
   }
 
   #stage {
-    position: relative;
-    flex: 1;
-    min-height: 0;
+    position: absolute;
+    inset: 0;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -104,14 +115,35 @@
   .click-zone.disabled { cursor: default; }
   .click-zone.disabled .arrow { display: none; }
 
+  /* The untouched gap between the two 45%-wide side zones — tapping here
+     toggles the header/footer chrome, same as tapping the middle of a page
+     in Apple Books. */
+  .click-zone.center {
+    left: 45%;
+    width: 10%;
+    z-index: 3;
+  }
+
   footer {
-    flex-shrink: 0;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 20;
     padding: 8px calc(14px + env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) calc(14px + env(safe-area-inset-left));
     text-align: center;
     color: var(--muted);
     font-size: 0.75rem;
-    background: var(--card);
+    background: rgba(27, 30, 43, 0.88);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     border-top: 1px solid #232741;
+    transition: opacity 0.25s ease, transform 0.25s ease;
+  }
+  footer.chrome-hidden {
+    opacity: 0;
+    transform: translateY(8px);
+    pointer-events: none;
   }
 
   .full-screen-message {
@@ -176,6 +208,7 @@
   <div id="stage">
     <canvas id="page-canvas" class="hidden"></canvas>
     <div class="click-zone left" id="zone-prev"><span class="arrow">‹</span></div>
+    <div class="click-zone center" id="zone-toggle-chrome"></div>
     <div class="click-zone right" id="zone-next"><span class="arrow">›</span></div>
 
     <div class="full-screen-message" id="loading-screen">
@@ -223,6 +256,7 @@
   const ctx = canvas.getContext('2d');
   const zonePrev = document.getElementById('zone-prev');
   const zoneNext = document.getElementById('zone-next');
+  const zoneToggleChrome = document.getElementById('zone-toggle-chrome');
   const loadingScreen = document.getElementById('loading-screen');
   const loadingDetail = document.getElementById('loading-detail');
   const noGigScreen = document.getElementById('no-gig-screen');
@@ -240,6 +274,29 @@
   let currentIndex = 0;
   let playCounts = {};     // song_id -> count of plays recorded so far tonight
   let atEnd = false;
+  let chromeHideTimer = null;
+  const CHROME_AUTO_HIDE_MS = 3000;
+
+  // Header/footer behave like Apple Books' top bar: visible briefly, then
+  // fade away so the chart can fill the whole screen, reappearing on a tap
+  // in the middle of the page (or on any real navigation).
+  function showChrome(autoHideAfter) {
+    topBar.classList.remove('chrome-hidden');
+    progressFooter.classList.remove('chrome-hidden');
+    clearTimeout(chromeHideTimer);
+    if (autoHideAfter !== false) {
+      chromeHideTimer = setTimeout(hideChrome, CHROME_AUTO_HIDE_MS);
+    }
+  }
+  function hideChrome() {
+    clearTimeout(chromeHideTimer);
+    topBar.classList.add('chrome-hidden');
+    progressFooter.classList.add('chrome-hidden');
+  }
+  function toggleChrome() {
+    if (topBar.classList.contains('chrome-hidden')) showChrome();
+    else hideChrome();
+  }
 
   window.exitToConsole = function () {
     // The viewer opens in its own tab from the console, so closing it
@@ -319,7 +376,8 @@
     canvas.classList.remove('hidden');
     loadingScreen.classList.add('hidden');
 
-    goToIndex(0, { record: false });
+    showChrome();
+    await goToIndex(0, { record: false });
   }
 
   function showOnly(screenEl) {
@@ -410,15 +468,23 @@
 
     const page = await entry.pdf.getPage(entry.pageNum);
     const stageEl = document.getElementById('stage');
-    const availableWidth = stageEl.clientWidth * 0.92;
-    const availableHeight = stageEl.clientHeight * 0.94;
+    const availableWidth = stageEl.clientWidth * 0.96;
+    const availableHeight = stageEl.clientHeight * 0.97;
     const baseViewport = page.getViewport({ scale: 1 });
     const scale = Math.min(availableWidth / baseViewport.width, availableHeight / baseViewport.height);
     const viewport = page.getViewport({ scale: Math.max(scale, 0.1) });
 
-    canvas.width = viewport.width;
-    canvas.height = viewport.height;
-    await page.render({ canvasContext: ctx, viewport }).promise;
+    // Render at the screen's real pixel density (Retina/iPad displays are
+    // typically 2x or 3x) so the chart is crisp instead of stretched — the
+    // canvas's CSS size stays the same, only its backing pixel buffer grows.
+    const outputScale = window.devicePixelRatio || 1;
+    canvas.width = Math.floor(viewport.width * outputScale);
+    canvas.height = Math.floor(viewport.height * outputScale);
+    canvas.style.width = Math.floor(viewport.width) + 'px';
+    canvas.style.height = Math.floor(viewport.height) + 'px';
+    const transform = outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : undefined;
+
+    await page.render({ canvasContext: ctx, viewport, transform }).promise;
   }
 
   function escapeHtml(str) {
@@ -475,6 +541,7 @@
 
   zoneNext.addEventListener('click', nextPage);
   zonePrev.addEventListener('click', prevPage);
+  zoneToggleChrome.addEventListener('click', toggleChrome);
 
   document.addEventListener('keydown', (e) => {
     if (e.key === 'ArrowRight') nextPage();
