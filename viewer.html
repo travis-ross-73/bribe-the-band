@@ -2,8 +2,12 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
 <title>Bribe The Band — Set Viewer</title>
+<!-- If added to an iPad/iPhone home screen, launches without Safari's address bar for a true full-screen view -->
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="mobile-web-app-capable" content="yes" />
 <style>
   :root {
     --bg: #0c0d13;
@@ -28,7 +32,7 @@
 
   header {
     flex-shrink: 0;
-    padding: 10px 14px;
+    padding: calc(10px + env(safe-area-inset-top)) calc(14px + env(safe-area-inset-right)) 10px calc(14px + env(safe-area-inset-left));
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -49,7 +53,7 @@
     border-radius: 999px;
     white-space: nowrap;
   }
-  #exit-btn {
+  #exit-btn, #fullscreen-btn {
     background: transparent;
     border: 1px solid #2a2e40;
     color: var(--muted);
@@ -102,7 +106,7 @@
 
   footer {
     flex-shrink: 0;
-    padding: 8px 14px;
+    padding: 8px calc(14px + env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) calc(14px + env(safe-area-inset-left));
     text-align: center;
     color: var(--muted);
     font-size: 0.75rem;
@@ -164,6 +168,7 @@
     </div>
     <div class="right">
       <div class="play-badge hidden" id="play-badge">played 0x tonight</div>
+      <button id="fullscreen-btn">⛶ Full Screen</button>
       <button id="exit-btn">Exit to Console</button>
     </div>
   </header>
@@ -213,6 +218,7 @@
   const songSubEl = document.getElementById('song-sub');
   const playBadge = document.getElementById('play-badge');
   const exitBtn = document.getElementById('exit-btn');
+  const fullscreenBtn = document.getElementById('fullscreen-btn');
   const canvas = document.getElementById('page-canvas');
   const ctx = canvas.getContext('2d');
   const zonePrev = document.getElementById('zone-prev');
@@ -480,6 +486,43 @@
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => { if (!atEnd) renderCurrentPage(); }, 150);
   });
+  // iOS fires 'resize' on rotation too, but 'orientationchange' fires first
+  // and more reliably — re-render on both so a rotate never leaves a
+  // stale/undersized page behind.
+  window.addEventListener('orientationchange', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => { if (!atEnd) renderCurrentPage(); }, 300);
+  });
+
+  function isFullscreen() {
+    return !!(document.fullscreenElement || document.webkitFullscreenElement);
+  }
+
+  function updateFullscreenBtnLabel() {
+    fullscreenBtn.textContent = isFullscreen() ? '⛶ Exit Full Screen' : '⛶ Full Screen';
+  }
+
+  fullscreenBtn.addEventListener('click', async () => {
+    const el = document.documentElement;
+    try {
+      if (!isFullscreen()) {
+        if (el.requestFullscreen) await el.requestFullscreen();
+        else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen(); // Safari/iPadOS
+      } else {
+        if (document.exitFullscreen) await document.exitFullscreen();
+        else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+      }
+    } catch (err) {
+      // iPhone Safari (unlike iPadOS) doesn't support the Fullscreen API at
+      // all for arbitrary elements — fails silently here. Adding the page
+      // to the home screen (see the apple-mobile-web-app meta tags) is the
+      // fallback way to get a chrome-free view on those devices.
+      console.warn('Fullscreen request failed', err);
+    }
+  });
+
+  document.addEventListener('fullscreenchange', updateFullscreenBtnLabel);
+  document.addEventListener('webkitfullscreenchange', updateFullscreenBtnLabel);
 
   init();
 </script>
