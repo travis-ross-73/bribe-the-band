@@ -83,6 +83,10 @@
     align-items: center;
     justify-content: center;
     background: #05060a;
+    /* This is a full-bleed reading surface, not a scrollable page — disable
+       the browser's own pan/zoom/edge-swipe-back gestures so our own swipe
+       (page turn) and tap (toggle chrome) handling gets every touch. */
+    touch-action: none;
   }
   #page-canvas {
     max-width: 100%;
@@ -232,7 +236,7 @@
   </div>
 
   <footer id="progress-footer" class="hidden">
-    Song <span id="song-index">1</span> of <span id="song-count">1</span> · Page <span id="page-index">1</span> of <span id="page-count">1</span> · click/tap sides or use ← →
+    Song <span id="song-index">1</span> of <span id="song-count">1</span> · Page <span id="page-index">1</span> of <span id="page-count">1</span> · swipe, click the sides, or use ← →
   </footer>
 </div>
 
@@ -274,6 +278,7 @@
   let currentIndex = 0;
   let playCounts = {};     // song_id -> count of plays recorded so far tonight
   let atEnd = false;
+  let viewerReady = false; // true once the set has loaded and swipe/tap navigation should respond
   let chromeHideTimer = null;
   const CHROME_AUTO_HIDE_MS = 3000;
 
@@ -376,6 +381,7 @@
     canvas.classList.remove('hidden');
     loadingScreen.classList.add('hidden');
 
+    viewerReady = true;
     showChrome();
     await goToIndex(0, { record: false });
   }
@@ -459,7 +465,7 @@
       canvas.classList.add('hidden');
       loadingScreen.classList.remove('hidden');
       loadingScreen.querySelector('.spinner').classList.add('hidden');
-      loadingDetail.innerHTML = `Couldn't load the chart for <strong>${escapeHtml(entry.song.title)}</strong>.<br><span style="color:var(--danger);font-size:0.8rem;">${escapeHtml(entry.loadError)}</span><br><br>Use the arrows or click the sides to skip ahead.`;
+      loadingDetail.innerHTML = `Couldn't load the chart for <strong>${escapeHtml(entry.song.title)}</strong>.<br><span style="color:var(--danger);font-size:0.8rem;">${escapeHtml(entry.loadError)}</span><br><br>Swipe, click the sides, or use the arrow keys to skip ahead.`;
       return;
     }
     loadingScreen.classList.add('hidden');
@@ -539,9 +545,54 @@
     goToIndex(currentIndex - 1, { record: false });
   }
 
-  zoneNext.addEventListener('click', nextPage);
-  zonePrev.addEventListener('click', prevPage);
-  zoneToggleChrome.addEventListener('click', toggleChrome);
+  // Unified pointer handling for the whole stage, branching on pointerType:
+  //  - mouse (desktop): precise clicking — left ~45% = prev page, right ~45%
+  //    = next page, small middle gap = toggle chrome. Matches the original
+  //    click-zone design, since a mouse has hover affordance (the arrows)
+  //    and doesn't need a big forgiving target.
+  //  - touch / pen (any tablet — iPad, Android, Surface, etc.): a horizontal
+  //    swipe turns the page in that direction from anywhere on the screen,
+  //    and a tap that barely moves toggles the header/footer chrome — same
+  //    behavior a book app uses, and it works the same size touch target
+  //    everywhere since it's plain Pointer Events, not anything iOS-specific.
+  const stageEl = document.getElementById('stage');
+  const SWIPE_THRESHOLD = 40; // px of horizontal travel to count as a page-turn swipe
+  const TAP_THRESHOLD = 12;   // px of total travel to still count as a "tap"
+  let pointerStartX = 0;
+  let pointerStartY = 0;
+
+  stageEl.addEventListener('pointerdown', (e) => {
+    pointerStartX = e.clientX;
+    pointerStartY = e.clientY;
+  });
+
+  stageEl.addEventListener('pointerup', (e) => {
+    if (!viewerReady || atEnd) return;
+
+    const dx = e.clientX - pointerStartX;
+    const dy = e.clientY - pointerStartY;
+    const absDx = Math.abs(dx);
+    const absDy = Math.abs(dy);
+
+    if (e.pointerType === 'mouse') {
+      if (absDx > TAP_THRESHOLD || absDy > TAP_THRESHOLD) return; // a drag, not a click
+      const rect = stageEl.getBoundingClientRect();
+      const relX = (e.clientX - rect.left) / rect.width;
+      if (relX < 0.45) prevPage();
+      else if (relX > 0.55) nextPage();
+      else toggleChrome();
+      return;
+    }
+
+    // Touch / pen.
+    if (absDx > SWIPE_THRESHOLD && absDx > absDy * 1.5) {
+      if (dx < 0) nextPage(); else prevPage();
+    } else if (absDx <= TAP_THRESHOLD && absDy <= TAP_THRESHOLD) {
+      toggleChrome();
+    }
+    // Anything else (a short diagonal drag, a scroll-like gesture) is
+    // ambiguous — ignored on purpose so it can't misfire a page turn.
+  });
 
   document.addEventListener('keydown', (e) => {
     if (e.key === 'ArrowRight') nextPage();
