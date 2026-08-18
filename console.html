@@ -333,7 +333,7 @@
 
     <section>
       <h2>Incoming Requests</h2>
-      <div class="section-sub">Tip-ranked, highest first, with the song's key and a chart link for quick reference. "Dismiss" clears it from this queue for now — full swipe/queue integration comes with the chart viewer in Stage 2.</div>
+      <div class="section-sub">Tip-ranked, highest first, with the song's key and a chart link for quick reference. "Dismiss" just clears it from this queue — accepting a request into tonight's set now happens from the live request drawer in the chart viewer, once "Start the Set" is running.</div>
       <div id="request-list"></div>
     </section>
 
@@ -858,7 +858,12 @@
     requestListEl.querySelectorAll('[data-dismiss]').forEach(btn => {
       btn.addEventListener('click', async () => {
         const id = btn.getAttribute('data-dismiss');
-        await supabase.from('requests').update({ status: 'accepted' }).eq('id', id);
+        // "Dismiss" here just clears the item from this queue — it does NOT
+        // mean "accept into tonight's set." Real acceptance (which splices
+        // the song into the running order) only happens from the live
+        // viewer's request drawer, via a separate 'accepted' status. Marking
+        // this 'declined' keeps the two meanings from colliding.
+        await supabase.from('requests').update({ status: 'declined' }).eq('id', id);
         renderRequests();
       });
     });

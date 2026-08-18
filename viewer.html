@@ -150,6 +150,129 @@
     pointer-events: none;
   }
 
+  /* Request notification badge — deliberately NOT part of the header, so it
+     stays visible even while the header/footer chrome is auto-hidden (or on
+     the end-of-set screen). Shows a count only, per the agreed drawer
+     design; tapping it opens the full request drawer. */
+  #request-badge {
+    position: fixed;
+    top: calc(10px + env(safe-area-inset-top));
+    right: calc(14px + env(safe-area-inset-right));
+    z-index: 30;
+    background: var(--accent);
+    color: #12141c;
+    border: none;
+    border-radius: 999px;
+    padding: 9px 14px;
+    font-weight: 700;
+    font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+  }
+
+  .drawer-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    background: rgba(5, 6, 10, 0.6);
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+  }
+  .drawer-panel {
+    width: 100%;
+    max-width: 640px;
+    max-height: 78vh;
+    background: var(--card);
+    border-radius: 18px 18px 0 0;
+    border-top: 1px solid #2a2e40;
+    display: flex;
+    flex-direction: column;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .drawer-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 18px 10px;
+    border-bottom: 1px solid #232741;
+    flex-shrink: 0;
+  }
+  .drawer-header h2 { margin: 0; font-size: 1.05rem; }
+  .drawer-header button {
+    background: transparent;
+    border: 1px solid #2a2e40;
+    color: var(--text);
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .drawer-list {
+    overflow-y: auto;
+    padding: 8px 18px 18px;
+  }
+  .drawer-empty {
+    color: var(--muted);
+    text-align: center;
+    padding: 30px 10px;
+    font-size: 0.9rem;
+  }
+  .drawer-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px 0;
+    border-bottom: 1px solid #232741;
+  }
+  .drawer-row:last-child { border-bottom: none; }
+  .drawer-row .info { min-width: 0; }
+  .drawer-row .title { font-weight: 700; font-size: 0.95rem; }
+  .drawer-row .title .key { color: var(--muted); font-weight: 400; }
+  .drawer-row .note { color: var(--muted); font-size: 0.82rem; margin-top: 3px; }
+  .drawer-row .note a { color: var(--accent); }
+  .drawer-row .tip { color: var(--accent); font-weight: 700; font-size: 0.85rem; white-space: nowrap; margin-left: 8px; }
+  .drawer-row .actions { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
+  .drawer-row .actions button {
+    border: none;
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-weight: 700;
+    font-size: 0.82rem;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .drawer-row .actions .accept-btn { background: var(--accent); color: #12141c; }
+  .drawer-row .actions .decline-btn { background: transparent; border: 1px solid #2a2e40; color: var(--muted); }
+  .drawer-row .actions .ack-btn { background: transparent; border: 1px solid #2a2e40; color: var(--text); }
+
+  .toast-stack {
+    position: fixed;
+    bottom: calc(70px + env(safe-area-inset-bottom));
+    left: 0;
+    right: 0;
+    z-index: 35;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    pointer-events: none;
+  }
+  .toast {
+    background: rgba(27, 30, 43, 0.95);
+    border: 1px solid #2a2e40;
+    color: var(--text);
+    padding: 10px 16px;
+    border-radius: 999px;
+    font-size: 0.82rem;
+    max-width: 90vw;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+  }
+
   .full-screen-message {
     position: absolute;
     inset: 0;
@@ -238,6 +361,20 @@
   <footer id="progress-footer" class="hidden">
     Song <span id="song-index">1</span> of <span id="song-count">1</span> · Page <span id="page-index">1</span> of <span id="page-count">1</span> · swipe, click the sides, or use ← →
   </footer>
+
+  <button id="request-badge" class="hidden">🔔 <span id="request-badge-count">0</span></button>
+
+  <div class="drawer-overlay hidden" id="drawer-overlay">
+    <div class="drawer-panel">
+      <div class="drawer-header">
+        <h2>Requests</h2>
+        <button id="drawer-close-btn">Done</button>
+      </div>
+      <div class="drawer-list" id="drawer-list"></div>
+    </div>
+  </div>
+
+  <div class="toast-stack" id="toast-stack"></div>
 </div>
 
 <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -270,6 +407,12 @@
   const songCountEl = document.getElementById('song-count');
   const pageIndexEl = document.getElementById('page-index');
   const pageCountEl = document.getElementById('page-count');
+  const requestBadge = document.getElementById('request-badge');
+  const requestBadgeCountEl = document.getElementById('request-badge-count');
+  const drawerOverlay = document.getElementById('drawer-overlay');
+  const drawerCloseBtn = document.getElementById('drawer-close-btn');
+  const drawerListEl = document.getElementById('drawer-list');
+  const toastStack = document.getElementById('toast-stack');
 
   let performer = null;
   let gig = null;
@@ -281,6 +424,10 @@
   let viewerReady = false; // true once the set has loaded and swipe/tap navigation should respond
   let chromeHideTimer = null;
   const CHROME_AUTO_HIDE_MS = 3000;
+  let pendingRequests = [];       // requests with status 'pending' for tonight's gig
+  let drawerOpen = false;
+  let requestPollTimer = null;
+  const REQUEST_POLL_MS = 15000;
 
   // Header/footer behave like Apple Books' top bar: visible briefly, then
   // fade away so the chart can fill the whole screen, reappearing on a tap
@@ -384,6 +531,9 @@
     viewerReady = true;
     showChrome();
     await goToIndex(0, { record: false });
+
+    await refreshPendingRequests();
+    requestPollTimer = setInterval(refreshPendingRequests, REQUEST_POLL_MS);
   }
 
   function showOnly(screenEl) {
@@ -498,6 +648,204 @@
     div.textContent = str ?? '';
     return div.innerHTML;
   }
+
+  // Combines song_key + key_with_capo the same way the console does, e.g.
+  // "G" or "D · Capo 7 (play D shapes)".
+  function formatKeyLabel(song) {
+    const parts = [];
+    if (song.song_key) parts.push(song.song_key);
+    if (song.key_with_capo && !/^\s*no capo\s*$/i.test(song.key_with_capo)) {
+      parts.push(song.key_with_capo);
+    }
+    return parts.join(' · ');
+  }
+
+  function showToast(message) {
+    const el = document.createElement('div');
+    el.className = 'toast';
+    el.textContent = message;
+    toastStack.appendChild(el);
+    setTimeout(() => el.remove(), 5000);
+  }
+
+  // ---------------- Live request drawer (Stage 2, phase 2) ----------------
+  // Incoming requests show as a count-only badge; the performer opens the
+  // drawer on their own timing, accepts/declines at will, and the drawer
+  // stays open until they manually close it. Accepted songs only actually
+  // get spliced into the running set at that close — not the instant
+  // they're accepted — so several can be accepted in a row and they land
+  // in the set in the order they were accepted.
+
+  async function refreshPendingRequests() {
+    if (!gig) return;
+    const { data, error } = await supabase
+      .from('requests')
+      .select('id, song_id, tip_amount, note, created_at, songs(id, title, artist, song_key, key_with_capo, chart_url)')
+      .eq('gig_session_id', gig.id)
+      .eq('status', 'pending')
+      .order('tip_amount', { ascending: false })
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      console.error('Could not load pending requests', error);
+      return;
+    }
+
+    pendingRequests = data || [];
+    requestBadgeCountEl.textContent = pendingRequests.length;
+    requestBadge.classList.toggle('hidden', pendingRequests.length === 0);
+    if (drawerOpen) renderDrawerList();
+  }
+
+  function renderDrawerList() {
+    if (pendingRequests.length === 0) {
+      drawerListEl.innerHTML = '<div class="drawer-empty">No pending requests right now.</div>';
+      return;
+    }
+
+    drawerListEl.innerHTML = pendingRequests.map(r => {
+      const song = r.songs;
+      const tipLabel = r.tip_amount > 0 ? `$${Number(r.tip_amount).toFixed(0)}` : 'No tip';
+      const title = song ? song.title : 'General tip (no song requested)';
+      const keyLabel = song ? formatKeyLabel(song) : '';
+      const actionsHtml = song
+        ? `<button class="accept-btn" data-accept="${r.id}">Accept</button>
+           <button class="decline-btn" data-decline="${r.id}">Decline</button>`
+        : `<button class="ack-btn" data-ack="${r.id}">Got it</button>`;
+      return `
+        <div class="drawer-row" data-request-row="${r.id}">
+          <div class="info">
+            <div class="title">${escapeHtml(title)}${keyLabel ? ` <span class="key">(${escapeHtml(keyLabel)})</span>` : ''}</div>
+            ${r.note ? `<div class="note">${escapeHtml(r.note)}</div>` : ''}
+            ${song && song.chart_url ? `<div class="note"><a href="${song.chart_url}" target="_blank" rel="noopener">Open chart</a></div>` : ''}
+          </div>
+          <div class="tip">${tipLabel}</div>
+          <div class="actions">${actionsHtml}</div>
+        </div>
+      `;
+    }).join('');
+
+    drawerListEl.querySelectorAll('[data-accept]').forEach(btn => {
+      btn.addEventListener('click', () => acceptRequest(btn.getAttribute('data-accept')));
+    });
+    drawerListEl.querySelectorAll('[data-decline]').forEach(btn => {
+      btn.addEventListener('click', () => declineRequest(btn.getAttribute('data-decline')));
+    });
+    drawerListEl.querySelectorAll('[data-ack]').forEach(btn => {
+      btn.addEventListener('click', () => acknowledgeTip(btn.getAttribute('data-ack')));
+    });
+  }
+
+  async function acceptRequest(requestId) {
+    // Marked accepted now, but NOT spliced into the running order until the
+    // drawer closes — spliceAcceptedRequests() picks up every accepted-but-
+    // not-yet-spliced row for this gig at that point.
+    await supabase.from('requests').update({ status: 'accepted' }).eq('id', requestId);
+    await refreshPendingRequests();
+  }
+
+  async function declineRequest(requestId) {
+    await supabase.from('requests').update({ status: 'declined' }).eq('id', requestId);
+    await refreshPendingRequests();
+  }
+
+  async function acknowledgeTip(requestId) {
+    // A tip-only submission has nothing to splice — close it out immediately.
+    await supabase.from('requests').update({ status: 'accepted', spliced_at: new Date().toISOString() }).eq('id', requestId);
+    await refreshPendingRequests();
+  }
+
+  function openDrawer() {
+    drawerOpen = true;
+    drawerOverlay.classList.remove('hidden');
+    renderDrawerList();
+    refreshPendingRequests();
+  }
+
+  async function closeDrawer() {
+    drawerOpen = false;
+    drawerOverlay.classList.add('hidden');
+    await spliceAcceptedRequests();
+  }
+
+  // Pulls every request accepted (from this drawer or a prior one) that
+  // hasn't been spliced in yet, loads each song's chart, and inserts it
+  // right after the page currently on screen — so accepted songs become
+  // the very next swipes, in the order they were accepted.
+  async function spliceAcceptedRequests() {
+    const { data, error } = await supabase
+      .from('requests')
+      .select('id, song_id, songs(id, title, artist, song_key, key_with_capo, chart_url)')
+      .eq('gig_session_id', gig.id)
+      .eq('status', 'accepted')
+      .is('spliced_at', null)
+      .order('created_at', { ascending: true });
+
+    if (error || !data || data.length === 0) return;
+
+    const wasAtEnd = atEnd;
+    const currentEntry = pageStream[currentIndex];
+    let insertAt = currentIndex + 1;
+    let songInsertAt = currentEntry
+      ? orderedSongs.findIndex(s => s.id === currentEntry.song.id) + 1
+      : orderedSongs.length;
+    const addedTitles = [];
+
+    for (const row of data) {
+      const song = row.songs;
+      if (!song) {
+        // The song was deleted from the catalog after being requested —
+        // nothing to splice, just close the row out so it's not retried.
+        await supabase.from('requests').update({ spliced_at: new Date().toISOString() }).eq('id', row.id);
+        continue;
+      }
+
+      const newEntries = [];
+      try {
+        const pdf = await window.pdfjsLib.getDocument(song.chart_url).promise;
+        for (let p = 1; p <= pdf.numPages; p++) {
+          newEntries.push({ song, pdf, pageNum: p, isFirstPageOfSong: p === 1, isLastPageOfSong: p === pdf.numPages });
+        }
+      } catch (err) {
+        console.error(`Could not load requested chart for "${song.title}"`, err);
+        newEntries.push({
+          song, pdf: null, pageNum: 1, isFirstPageOfSong: true, isLastPageOfSong: true,
+          loadError: err && err.message ? err.message : 'Could not load this chart.',
+        });
+      }
+
+      pageStream.splice(insertAt, 0, ...newEntries);
+      insertAt += newEntries.length;
+      orderedSongs.splice(songInsertAt, 0, song);
+      songInsertAt += 1;
+      addedTitles.push(song.title);
+
+      await supabase.from('requests').update({ spliced_at: new Date().toISOString() }).eq('id', row.id);
+    }
+
+    if (addedTitles.length === 0) return;
+
+    // Persist so the new running order survives a reload.
+    gig.runtime_order = orderedSongs.map(s => s.id);
+    await supabase.from('gig_sessions').update({ runtime_order: gig.runtime_order }).eq('id', gig.id);
+
+    songCountEl.textContent = orderedSongs.length;
+    showToast(`Added to the set: ${addedTitles.join(', ')} — up next`);
+
+    if (wasAtEnd) {
+      // The set had finished, but there's now more to play — resume.
+      atEnd = false;
+      endScreen.classList.add('hidden');
+      topBar.classList.remove('hidden');
+      progressFooter.classList.remove('hidden');
+      canvas.classList.remove('hidden');
+      showChrome();
+      await goToIndex(currentIndex + 1, { record: false });
+    }
+  }
+
+  requestBadge.addEventListener('click', openDrawer);
+  drawerCloseBtn.addEventListener('click', closeDrawer);
 
   async function recordPlay(songId) {
     playCounts[songId] = (playCounts[songId] || 0) + 1;
