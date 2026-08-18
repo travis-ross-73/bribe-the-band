@@ -287,6 +287,33 @@
     gap: 8px;
   }
   .manage-song-grid input { margin-bottom: 0; }
+  #gig-caps-panel {
+    margin-top: 14px;
+    padding: 12px 14px;
+    background: #171a26;
+    border: 1px solid #2a2e40;
+    border-radius: 8px;
+  }
+  #gig-caps-panel h3 {
+    margin: 0 0 4px;
+    font-size: 1rem;
+  }
+  .gig-cap-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid #2a2e40;
+  }
+  .gig-cap-row:last-child { border-bottom: none; }
+  .gig-cap-row .gig-cap-title { font-weight: 600; font-size: 0.92rem; }
+  .gig-cap-row .gig-cap-artist { color: var(--muted, #9a9db0); font-size: 0.78rem; }
+  .gig-cap-row input {
+    width: 90px;
+    margin-bottom: 0;
+    text-align: center;
+  }
   .manage-song-row .row-bottom {
     display: flex;
     align-items: center;
@@ -329,6 +356,16 @@
       <select id="setlist-picker"></select>
       <button class="primary" id="start-gig-btn">Start New Gig With Selected Setlist</button>
       <button id="start-set-btn" disabled>Start the Set</button>
+
+      <div id="gig-caps-panel" class="hidden">
+        <h3>Nightly Request Caps</h3>
+        <div class="section-sub">Block new requests for a song once it's been requested this many times tonight. Leave blank for no limit. These carry over from your last gig automatically — tweak as needed for tonight.</div>
+        <div id="gig-caps-list"></div>
+        <div class="button-row">
+          <button class="secondary" id="save-gig-caps-btn">Save Caps for Tonight</button>
+        </div>
+        <div class="manage-song-status" id="gig-caps-status"></div>
+      </div>
     </section>
 
     <section>
@@ -438,6 +475,10 @@
   const startGigBtn = document.getElementById('start-gig-btn');
   const startSetBtn = document.getElementById('start-set-btn');
   const requestListEl = document.getElementById('request-list');
+  const gigCapsPanel = document.getElementById('gig-caps-panel');
+  const gigCapsListEl = document.getElementById('gig-caps-list');
+  const saveGigCapsBtn = document.getElementById('save-gig-caps-btn');
+  const gigCapsStatus = document.getElementById('gig-caps-status');
 
   const editingBanner = document.getElementById('editing-banner');
   const newSetlistName = document.getElementById('new-setlist-name');
@@ -521,7 +562,7 @@
   async function loadSongs() {
     const { data } = await supabase
       .from('songs')
-      .select('id, title, artist, chart_url, song_key, key_with_capo, max_requests_per_gig')
+      .select('id, title, artist, chart_url, song_key, key_with_capo')
       .eq('performer_id', performer.id)
       .order('title');
     songs = data || [];
@@ -539,7 +580,7 @@
   async function loadActiveGig() {
     const { data } = await supabase
       .from('gig_sessions')
-      .select('id, gig_code, active_setlist_id, runtime_order, status, created_at')
+      .select('id, gig_code, active_setlist_id, runtime_order, song_caps, status, created_at')
       .eq('performer_id', performer.id)
       .eq('status', 'active')
       .order('created_at', { ascending: false })
@@ -560,7 +601,71 @@
       activeGigStatus.textContent = 'No active gig right now.';
       startSetBtn.disabled = true;
     }
+    renderGigCapsPanel();
   }
+
+  // ---------------- Request caps: per-gig, per-song nightly limits ----------------
+  // The cap is scoped to a single gig (tonight's show), not the song's
+  // catalog entry — Travis wants to be able to raise/lower it night to
+  // night, so it lives on gig_sessions.song_caps (a jsonb map of
+  // song_id -> integer cap) rather than on the song itself.
+  function renderGigCapsPanel() {
+    if (!activeGig || !activeGig.runtime_order || activeGig.runtime_order.length === 0) {
+      gigCapsPanel.classList.add('hidden');
+      return;
+    }
+    gigCapsPanel.classList.remove('hidden');
+    gigCapsStatus.textContent = '';
+
+    const caps = activeGig.song_caps || {};
+    // Only one row per song, in tonight's running order, even if it
+    // appears more than once (shouldn't normally happen, but be safe).
+    const seen = new Set();
+    const rows = [];
+    for (const songId of activeGig.runtime_order) {
+      if (seen.has(songId)) continue;
+      seen.add(songId);
+      const song = songs.find(s => s.id === songId);
+      if (!song) continue;
+      rows.push(song);
+    }
+
+    gigCapsListEl.innerHTML = rows.map(song => `
+      <div class="gig-cap-row" data-song="${song.id}">
+        <div>
+          <div class="gig-cap-title">${escapeHtml(song.title)}</div>
+          <div class="gig-cap-artist">${escapeHtml(song.artist)}</div>
+        </div>
+        <input type="number" min="1" step="1" data-cap-input value="${caps[song.id] ?? ''}" placeholder="No limit" />
+      </div>
+    `).join('');
+  }
+
+  saveGigCapsBtn.addEventListener('click', async () => {
+    if (!activeGig) return;
+    const newCaps = {};
+    gigCapsListEl.querySelectorAll('[data-song]').forEach(row => {
+      const songId = row.getAttribute('data-song');
+      const raw = row.querySelector('[data-cap-input]').value.trim();
+      if (raw) newCaps[songId] = parseInt(raw, 10);
+    });
+
+    gigCapsStatus.textContent = 'Saving…';
+    gigCapsStatus.className = 'manage-song-status';
+    const { error } = await supabase
+      .from('gig_sessions')
+      .update({ song_caps: newCaps })
+      .eq('id', activeGig.id);
+
+    if (error) {
+      gigCapsStatus.textContent = 'Could not save: ' + error.message;
+      gigCapsStatus.className = 'manage-song-status err';
+      return;
+    }
+    activeGig.song_caps = newCaps;
+    gigCapsStatus.textContent = 'Saved for tonight.';
+    gigCapsStatus.className = 'manage-song-status ok';
+  });
 
   startSetBtn.addEventListener('click', () => {
     if (!activeGig) return;
@@ -1201,7 +1306,6 @@
           <input type="text" data-field="artist" value="${escapeHtml(s.artist)}" placeholder="Artist" />
           <input type="text" data-field="song_key" value="${escapeHtml(s.song_key || '')}" placeholder="Key" />
           <input type="text" data-field="key_with_capo" value="${escapeHtml(s.key_with_capo || '')}" placeholder="Key with capo" />
-          <input type="number" min="1" step="1" data-field="max_requests_per_gig" value="${s.max_requests_per_gig ?? ''}" placeholder="Max requests/gig (blank = no limit)" />
         </div>
         <div class="row-bottom">
           <div class="chart-link"><a href="${chartLinkHref(s.chart_url)}" target="_blank" rel="noopener" data-chart-link>View current PDF</a></div>
@@ -1228,7 +1332,6 @@
         const artist = row.querySelector('[data-field="artist"]').value.trim();
         const songKey = row.querySelector('[data-field="song_key"]').value.trim();
         const capo = row.querySelector('[data-field="key_with_capo"]').value.trim();
-        const maxRequestsRaw = row.querySelector('[data-field="max_requests_per_gig"]').value.trim();
         const fileInput = row.querySelector('[data-replace-pdf]');
         const replacementFile = fileInput.files && fileInput.files[0];
 
@@ -1241,11 +1344,7 @@
           title,
           artist,
           song_key: songKey || null,
-          key_with_capo: capo || null,
-          // Nightly cap on how many times this song can be requested per gig
-          // (not how many times it's actually played) — blank means no limit.
-          // Enforced on the crowd request page via get_song_request_status().
-          max_requests_per_gig: maxRequestsRaw ? parseInt(maxRequestsRaw, 10) : null
+          key_with_capo: capo || null
         };
 
         try {
@@ -1322,6 +1421,18 @@
     const setlistId = setlistPicker.value;
     if (!setlistId) { alert('Pick (or save) a setlist first.'); return; }
 
+    // Carry forward the most recent gig's request caps, so recurring
+    // songs don't need their limit re-entered every single night — Travis
+    // can still tweak them for tonight in the caps panel once it loads.
+    const { data: lastGig } = await supabase
+      .from('gig_sessions')
+      .select('song_caps')
+      .eq('performer_id', performer.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const carriedCaps = (lastGig && lastGig.song_caps) || {};
+
     // End any currently active gig for this performer
     await supabase
       .from('gig_sessions')
@@ -1337,6 +1448,7 @@
       performer_id: performer.id,
       active_setlist_id: setlistId,
       runtime_order: setlist ? setlist.song_ids : [],
+      song_caps: carriedCaps,
       status: 'active'
     });
     if (error) { alert('Could not start gig: ' + error.message); return; }
