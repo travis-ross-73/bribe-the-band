@@ -329,6 +329,31 @@
   .manage-song-status.ok { color: var(--success); }
   .manage-song-status.err { color: var(--danger); }
   #song-manage-search { margin-bottom: 12px; }
+
+  /* Tab navigation */
+  .tab-nav {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 20px;
+    border-bottom: 1px solid #2a2e40;
+    overflow-x: auto;
+  }
+  .tab-btn {
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    padding: 10px 16px;
+    font-size: 0.92rem;
+    font-weight: 600;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    white-space: nowrap;
+  }
+  .tab-btn.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+  .tab-panel.hidden { display: none; }
 </style>
 </head>
 <body>
@@ -348,6 +373,14 @@
   </header>
 
   <main>
+
+    <div class="tab-nav" id="tab-nav">
+      <button class="tab-btn" data-tab="tonight">Tonight</button>
+      <button class="tab-btn" data-tab="setlists">Setlists</button>
+      <button class="tab-btn" data-tab="library">Song Library</button>
+    </div>
+
+    <div class="tab-panel" data-tab-panel="tonight">
 
     <section>
       <h2>Tonight's Gig</h2>
@@ -381,6 +414,10 @@
       <div id="request-list"></div>
     </section>
 
+    </div>
+
+    <div class="tab-panel" data-tab-panel="setlists">
+
     <section>
       <h2>Build a Setlist</h2>
       <div class="section-sub">Search and add songs on the left. They land in order on the right — use the arrows to rearrange.</div>
@@ -412,6 +449,10 @@
       <h2>Saved Setlists</h2>
       <div id="setlist-list"></div>
     </section>
+
+    </div>
+
+    <div class="tab-panel" data-tab-panel="library">
 
     <section>
       <h2>Add a Song</h2>
@@ -447,6 +488,8 @@
       <input type="text" id="song-manage-search" placeholder="Search your catalog…" />
       <div id="manage-song-list"></div>
     </section>
+
+    </div>
 
   </main>
 </div>
@@ -1465,6 +1508,30 @@
     await loadActiveGig();
     await renderRequests();
   });
+
+  // ---------------- Tab navigation ----------------
+  // Groups the console's sections (Tonight's Gig/Requests, Setlists,
+  // Song Library) behind a simple tab bar instead of one long scrolling
+  // page. Remembers the last tab in localStorage so refreshing mid-gig
+  // (or reopening the console the next night) doesn't dump you back to
+  // "Tonight" if you were, say, mid-edit in the Song Library.
+  const TAB_STORAGE_KEY = 'btb-console-active-tab';
+  const tabButtons = document.querySelectorAll('.tab-btn');
+  const tabPanels = document.querySelectorAll('.tab-panel');
+
+  function setActiveTab(tab) {
+    tabButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab));
+    tabPanels.forEach(panel => panel.classList.toggle('hidden', panel.dataset.tabPanel !== tab));
+    localStorage.setItem(TAB_STORAGE_KEY, tab);
+  }
+
+  tabButtons.forEach(btn => {
+    btn.addEventListener('click', () => setActiveTab(btn.dataset.tab));
+  });
+
+  const savedTab = localStorage.getItem(TAB_STORAGE_KEY);
+  const validTabs = Array.from(tabButtons).map(btn => btn.dataset.tab);
+  setActiveTab(validTabs.includes(savedTab) ? savedTab : 'tonight');
 
   // ---------------- Boot: resume session if already logged in ----------------
   (async () => {
