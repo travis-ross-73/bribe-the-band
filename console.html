@@ -354,6 +354,62 @@
     border-bottom-color: var(--accent);
   }
   .tab-panel.hidden { display: none; }
+
+  /* Reporting tab */
+  .report-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .report-stat {
+    background: #12141c;
+    border: 1px solid #2a2e40;
+    border-radius: 8px;
+    padding: 12px 14px;
+    text-align: center;
+  }
+  .report-stat .report-stat-value {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--accent);
+  }
+  .report-stat .report-stat-label {
+    font-size: 0.75rem;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+  .top-song-row, .song-tally-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 7px 0;
+    border-bottom: 1px solid #232741;
+    font-size: 0.88rem;
+  }
+  .top-song-row:last-child, .song-tally-row:last-child { border-bottom: none; }
+  .top-song-row .song-title, .song-tally-row .song-title { font-weight: 600; }
+  .top-song-row .song-artist, .song-tally-row .song-artist { color: var(--muted); font-size: 0.78rem; }
+  .top-song-row .song-stats, .song-tally-row .song-stats { color: var(--accent); font-weight: 600; white-space: nowrap; font-size: 0.85rem; }
+  .gig-report-row {
+    background: #12141c;
+    border: 1px solid #2a2e40;
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+  }
+  .gig-report-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+  .gig-report-date { font-weight: 700; }
+  .gig-report-status { color: var(--muted); font-size: 0.78rem; }
+  .gig-report-stats { color: var(--accent); font-weight: 600; font-size: 0.88rem; white-space: nowrap; }
+  .gig-report-songs { margin-top: 8px; border-top: 1px solid #232741; padding-top: 8px; }
 </style>
 </head>
 <body>
@@ -378,6 +434,7 @@
       <button class="tab-btn" data-tab="tonight">Tonight</button>
       <button class="tab-btn" data-tab="setlists">Setlists</button>
       <button class="tab-btn" data-tab="library">Song Library</button>
+      <button class="tab-btn" data-tab="reporting">Reporting</button>
     </div>
 
     <div class="tab-panel" data-tab-panel="tonight">
@@ -493,6 +550,24 @@
 
     </div>
 
+    <div class="tab-panel" data-tab-panel="reporting">
+
+    <section>
+      <h2>Lifetime Totals</h2>
+      <div class="section-sub">Tips and requests across every gig you've ever run — counts real crowd requests only (manually-added songs don't count as requests, and don't add a tip).</div>
+      <div id="reporting-status" class="empty-note hidden"></div>
+      <div id="lifetime-summary" class="report-summary-grid"></div>
+      <div id="lifetime-top-songs"></div>
+    </section>
+
+    <section>
+      <h2>By Gig</h2>
+      <div class="section-sub">Every past and current gig, most recent first — tip total, request count, and a per-song breakdown.</div>
+      <div id="gig-report-list"></div>
+    </section>
+
+    </div>
+
   </main>
 </div>
 
@@ -566,6 +641,12 @@
   const songManageSearch = document.getElementById('song-manage-search');
   const manageSongListEl = document.getElementById('manage-song-list');
 
+  const reportingStatusEl = document.getElementById('reporting-status');
+  const lifetimeSummaryEl = document.getElementById('lifetime-summary');
+  const lifetimeTopSongsEl = document.getElementById('lifetime-top-songs');
+  const gigReportListEl = document.getElementById('gig-report-list');
+  let reportingLoaded = false;
+
 
   // ---------------- Auth ----------------
   loginBtn.addEventListener('click', async () => {
@@ -611,6 +692,15 @@
     renderSetlists();
     renderManageSongs();
     await renderRequests();
+
+    // If the last-remembered tab was Reporting (localStorage), the boot-time
+    // setActiveTab() call ran before `performer` existed and skipped the
+    // lazy-load — pick it up now that login has completed.
+    const activeTabBtn = document.querySelector('.tab-btn.active');
+    if (activeTabBtn && activeTabBtn.dataset.tab === 'reporting' && !reportingLoaded) {
+      reportingLoaded = true;
+      loadReportingData();
+    }
   }
 
   // ---------------- Data loading ----------------
@@ -1528,6 +1618,155 @@
     await renderRequests();
   });
 
+  // ---------------- Reporting ----------------
+  // "A tally of songs requested by gig/date and then an account total" —
+  // Travis's own ask. Needs no schema changes: gig_sessions already has
+  // created_at + performer_id, and requests already has gig_session_id,
+  // song_id, tip_amount, status, is_manual. Everything here is aggregated
+  // client-side from those two tables. Manually-added songs (is_manual)
+  // are excluded entirely — they're not real crowd requests and never
+  // collected a tip, so counting them here would inflate both. Loaded
+  // lazily the first time the Reporting tab is opened, since this is a
+  // between-shows need, not something that should slow down every login.
+  function formatMoney(n) {
+    const num = Number(n || 0);
+    return num % 1 === 0 ? `$${num.toFixed(0)}` : `$${num.toFixed(2)}`;
+  }
+
+  function songLabel(songId) {
+    const s = songs.find(x => x.id === songId);
+    return s ? { title: s.title, artist: s.artist } : { title: songId || '(unknown song)', artist: '' };
+  }
+
+  async function loadReportingData() {
+    reportingStatusEl.classList.remove('hidden');
+    reportingStatusEl.textContent = 'Loading report…';
+
+    const { data: gigs, error: gigsError } = await supabase
+      .from('gig_sessions')
+      .select('id, gig_code, status, created_at')
+      .eq('performer_id', performer.id)
+      .order('created_at', { ascending: false });
+
+    if (gigsError) {
+      reportingStatusEl.textContent = 'Could not load gigs: ' + gigsError.message;
+      return;
+    }
+
+    const gigIds = (gigs || []).map(g => g.id);
+    let requests = [];
+    if (gigIds.length > 0) {
+      const { data: reqData, error: reqError } = await supabase
+        .from('requests')
+        .select('gig_session_id, song_id, tip_amount, status, is_manual')
+        .in('gig_session_id', gigIds)
+        .eq('is_manual', false);
+      if (reqError) {
+        reportingStatusEl.textContent = 'Could not load requests: ' + reqError.message;
+        return;
+      }
+      requests = reqData || [];
+    }
+
+    reportingStatusEl.classList.add('hidden');
+    renderReporting(gigs || [], requests);
+  }
+
+  function renderReporting(gigs, requests) {
+    // ---- Lifetime totals ----
+    const lifetimeTips = requests.reduce((sum, r) => sum + Number(r.tip_amount || 0), 0);
+    const songRequests = requests.filter(r => r.song_id);
+    const tipOnlyCount = requests.filter(r => !r.song_id).length;
+
+    lifetimeSummaryEl.innerHTML = `
+      <div class="report-stat"><div class="report-stat-value">${formatMoney(lifetimeTips)}</div><div class="report-stat-label">Total tips, all time</div></div>
+      <div class="report-stat"><div class="report-stat-value">${songRequests.length}</div><div class="report-stat-label">Song requests, all time</div></div>
+      <div class="report-stat"><div class="report-stat-value">${tipOnlyCount}</div><div class="report-stat-label">Tip-only (no song)</div></div>
+      <div class="report-stat"><div class="report-stat-value">${gigs.length}</div><div class="report-stat-label">Gigs run</div></div>
+    `;
+
+    const songTotals = {};
+    songRequests.forEach(r => {
+      if (!songTotals[r.song_id]) songTotals[r.song_id] = { count: 0, tips: 0 };
+      songTotals[r.song_id].count += 1;
+      songTotals[r.song_id].tips += Number(r.tip_amount || 0);
+    });
+    const topSongs = Object.entries(songTotals)
+      .map(([songId, v]) => ({ songId, ...v }))
+      .sort((a, b) => b.count - a.count || b.tips - a.tips)
+      .slice(0, 10);
+
+    if (topSongs.length === 0) {
+      lifetimeTopSongsEl.innerHTML = '<div class="empty-note">No requests recorded yet.</div>';
+    } else {
+      lifetimeTopSongsEl.innerHTML = `<div class="builder-col-label" style="margin-top:4px;">Most-Requested Songs</div>` +
+        topSongs.map(t => {
+          const label = songLabel(t.songId);
+          return `
+            <div class="top-song-row">
+              <span>
+                <div class="song-title">${escapeHtml(label.title)}</div>
+                <div class="song-artist">${escapeHtml(label.artist)}</div>
+              </span>
+              <span class="song-stats">${t.count}x · ${formatMoney(t.tips)}</span>
+            </div>
+          `;
+        }).join('');
+    }
+
+    // ---- By gig ----
+    if (gigs.length === 0) {
+      gigReportListEl.innerHTML = '<div class="empty-note">No gigs yet.</div>';
+      return;
+    }
+
+    gigReportListEl.innerHTML = gigs.map(g => {
+      const gigRequests = requests.filter(r => r.gig_session_id === g.id);
+      const gigTips = gigRequests.reduce((sum, r) => sum + Number(r.tip_amount || 0), 0);
+      const gigSongRequests = gigRequests.filter(r => r.song_id);
+
+      const bySong = {};
+      gigSongRequests.forEach(r => {
+        if (!bySong[r.song_id]) bySong[r.song_id] = { count: 0, tips: 0 };
+        bySong[r.song_id].count += 1;
+        bySong[r.song_id].tips += Number(r.tip_amount || 0);
+      });
+      const songRows = Object.entries(bySong)
+        .map(([songId, v]) => ({ songId, ...v }))
+        .sort((a, b) => b.count - a.count || b.tips - a.tips);
+
+      const dateLabel = new Date(g.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+
+      const songRowsHtml = songRows.length === 0
+        ? '<div class="empty-note">No song requests this gig.</div>'
+        : songRows.map(t => {
+            const label = songLabel(t.songId);
+            return `
+              <div class="song-tally-row">
+                <span>
+                  <div class="song-title">${escapeHtml(label.title)}</div>
+                  <div class="song-artist">${escapeHtml(label.artist)}</div>
+                </span>
+                <span class="song-stats">${t.count}x · ${formatMoney(t.tips)}</span>
+              </div>
+            `;
+          }).join('');
+
+      return `
+        <div class="gig-report-row">
+          <div class="gig-report-top">
+            <div>
+              <span class="gig-report-date">${dateLabel}</span>
+              <span class="gig-report-status"> — ${g.status === 'active' ? 'live now' : 'ended'} · ${escapeHtml(g.gig_code)}</span>
+            </div>
+            <div class="gig-report-stats">${gigSongRequests.length} requests · ${formatMoney(gigTips)}</div>
+          </div>
+          <div class="gig-report-songs">${songRowsHtml}</div>
+        </div>
+      `;
+    }).join('');
+  }
+
   // ---------------- Tab navigation ----------------
   // Groups the console's sections (Tonight's Gig/Requests, Setlists,
   // Song Library) behind a simple tab bar instead of one long scrolling
@@ -1542,6 +1781,10 @@
     tabButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab));
     tabPanels.forEach(panel => panel.classList.toggle('hidden', panel.dataset.tabPanel !== tab));
     localStorage.setItem(TAB_STORAGE_KEY, tab);
+    if (tab === 'reporting' && !reportingLoaded && performer) {
+      reportingLoaded = true;
+      loadReportingData();
+    }
   }
 
   tabButtons.forEach(btn => {
