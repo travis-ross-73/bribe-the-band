@@ -553,16 +553,32 @@
     <div class="tab-panel" data-tab-panel="reporting">
 
     <section>
-      <h2>Lifetime Totals</h2>
-      <div class="section-sub">Tips and requests across every gig you've ever run — counts real crowd requests only (manually-added songs don't count as requests, and don't add a tip).</div>
+      <h2>Reporting Range</h2>
+      <div class="section-sub">Filters both sections below. Counts real crowd requests only — manually-added songs don't count as requests, and don't add a tip.</div>
       <div id="reporting-status" class="empty-note hidden"></div>
+      <select id="report-range-select">
+        <option value="all">All time</option>
+        <option value="30">Last 30 days</option>
+        <option value="90">Last 90 days</option>
+        <option value="365">Last 365 days</option>
+        <option value="custom">Custom range…</option>
+      </select>
+      <div id="report-custom-range" class="hidden button-row" style="align-items:center;">
+        <input type="date" id="report-range-start" style="margin-bottom:0;" />
+        <input type="date" id="report-range-end" style="margin-bottom:0;" />
+        <button class="secondary" id="report-range-apply-btn">Apply</button>
+      </div>
+    </section>
+
+    <section>
+      <h2 id="lifetime-summary-heading">Totals — All Time</h2>
       <div id="lifetime-summary" class="report-summary-grid"></div>
       <div id="lifetime-top-songs"></div>
     </section>
 
     <section>
       <h2>By Gig</h2>
-      <div class="section-sub">Every past and current gig, most recent first — tip total, request count, and a per-song breakdown.</div>
+      <div class="section-sub">Every gig in the selected range, most recent first — tip total, request count, and a per-song breakdown.</div>
       <div id="gig-report-list"></div>
     </section>
 
@@ -642,10 +658,18 @@
   const manageSongListEl = document.getElementById('manage-song-list');
 
   const reportingStatusEl = document.getElementById('reporting-status');
+  const lifetimeSummaryHeadingEl = document.getElementById('lifetime-summary-heading');
   const lifetimeSummaryEl = document.getElementById('lifetime-summary');
   const lifetimeTopSongsEl = document.getElementById('lifetime-top-songs');
   const gigReportListEl = document.getElementById('gig-report-list');
+  const reportRangeSelect = document.getElementById('report-range-select');
+  const reportCustomRange = document.getElementById('report-custom-range');
+  const reportRangeStart = document.getElementById('report-range-start');
+  const reportRangeEnd = document.getElementById('report-range-end');
+  const reportRangeApplyBtn = document.getElementById('report-range-apply-btn');
   let reportingLoaded = false;
+  let allReportingGigs = [];      // unfiltered — fetched once, filtered client-side on range change
+  let allReportingRequests = [];
 
 
   // ---------------- Auth ----------------
@@ -1669,8 +1693,66 @@
     }
 
     reportingStatusEl.classList.add('hidden');
-    renderReporting(gigs || [], requests);
+    allReportingGigs = gigs || [];
+    allReportingRequests = requests;
+    applyReportingFilter();
   }
+
+  // Fetches everything once, then every range change (preset or custom) is
+  // just an in-memory filter + re-render — no extra round trip to Supabase
+  // for switching between "Last 30 days" and "Last 90 days", etc.
+  function reportRangeCutoffs() {
+    const mode = reportRangeSelect.value;
+    if (mode === 'all') return null;
+    if (mode === 'custom') {
+      const start = reportRangeStart.value ? new Date(reportRangeStart.value + 'T00:00:00') : null;
+      const end = reportRangeEnd.value ? new Date(reportRangeEnd.value + 'T23:59:59') : null;
+      if (!start && !end) return null;
+      return { start, end };
+    }
+    const days = parseInt(mode, 10);
+    const start = new Date();
+    start.setDate(start.getDate() - days);
+    return { start, end: null };
+  }
+
+  function reportRangeLabel() {
+    const mode = reportRangeSelect.value;
+    if (mode === 'all') return 'All Time';
+    if (mode === '30') return 'Last 30 Days';
+    if (mode === '90') return 'Last 90 Days';
+    if (mode === '365') return 'Last 365 Days';
+    if (mode === 'custom') {
+      const s = reportRangeStart.value || '…';
+      const e = reportRangeEnd.value || '…';
+      return `Custom (${s} to ${e})`;
+    }
+    return '';
+  }
+
+  function applyReportingFilter() {
+    const cutoffs = reportRangeCutoffs();
+    let gigs = allReportingGigs;
+    if (cutoffs) {
+      gigs = gigs.filter(g => {
+        const created = new Date(g.created_at);
+        if (cutoffs.start && created < cutoffs.start) return false;
+        if (cutoffs.end && created > cutoffs.end) return false;
+        return true;
+      });
+    }
+    const gigIds = new Set(gigs.map(g => g.id));
+    const requests = allReportingRequests.filter(r => gigIds.has(r.gig_session_id));
+
+    lifetimeSummaryHeadingEl.textContent = `Totals — ${reportRangeLabel()}`;
+    renderReporting(gigs, requests);
+  }
+
+  reportRangeSelect.addEventListener('change', () => {
+    reportCustomRange.classList.toggle('hidden', reportRangeSelect.value !== 'custom');
+    if (reportRangeSelect.value !== 'custom') applyReportingFilter();
+  });
+  reportRangeApplyBtn.addEventListener('click', applyReportingFilter);
 
   function renderReporting(gigs, requests) {
     // ---- Lifetime totals ----
@@ -1679,8 +1761,8 @@
     const tipOnlyCount = requests.filter(r => !r.song_id).length;
 
     lifetimeSummaryEl.innerHTML = `
-      <div class="report-stat"><div class="report-stat-value">${formatMoney(lifetimeTips)}</div><div class="report-stat-label">Total tips, all time</div></div>
-      <div class="report-stat"><div class="report-stat-value">${songRequests.length}</div><div class="report-stat-label">Song requests, all time</div></div>
+      <div class="report-stat"><div class="report-stat-value">${formatMoney(lifetimeTips)}</div><div class="report-stat-label">Total tips</div></div>
+      <div class="report-stat"><div class="report-stat-value">${songRequests.length}</div><div class="report-stat-label">Song requests</div></div>
       <div class="report-stat"><div class="report-stat-value">${tipOnlyCount}</div><div class="report-stat-label">Tip-only (no song)</div></div>
       <div class="report-stat"><div class="report-stat-value">${gigs.length}</div><div class="report-stat-label">Gigs run</div></div>
     `;
