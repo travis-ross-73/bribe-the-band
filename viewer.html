@@ -1301,6 +1301,22 @@
       : orderedSongs.length;
     const addedTitles = [];
 
+    // The reference point stamped on each group's rows — starts as wherever
+    // this tablet actually was when the drawer closed, then advances to
+    // "the song/page just spliced" after each group. This has to advance
+    // per-group (not stay fixed at the pre-batch position for the whole
+    // loop): a Follower can process each group as a SEPARATE
+    // checkForFollowerSplices() call, since Realtime fires once per DB
+    // write and inserting a song is async (chart-load time in between). If
+    // every group in a multi-song batch were stamped with the same
+    // original reference, a Follower that received them in separate calls
+    // would insert every later song back at that same original spot —
+    // landing them in reverse order instead of after the song(s) already
+    // spliced. Bug found by Travis: accepting two requests at once spliced
+    // them in the right order on the Master, but backwards on a Follower.
+    let refSongId = currentEntry ? currentEntry.song.id : null;
+    let refPageNum = currentEntry ? currentEntry.pageNum : null;
+
     for (const [songId, rows] of bySong.entries()) {
       const splicedAt = new Date().toISOString();
       const song = songMap[songId];
@@ -1320,15 +1336,23 @@
       const requestInfo = rows.map(r => ({ tipAmount: r.tip_amount, note: r.note }));
 
       const insertedCount = await insertSongAtIndex(song, { requestInfo }, insertAt, songInsertAt);
-      insertAt += insertedCount;
-      songInsertAt += 1;
-      addedTitles.push(rows.length > 1 ? `${song.title} (x${rows.length} requests)` : song.title);
 
       await supabase.from('requests').update({
         spliced_at: splicedAt,
-        splice_after_song_id: currentEntry ? currentEntry.song.id : null,
-        splice_after_page_num: currentEntry ? currentEntry.pageNum : null,
+        splice_after_song_id: refSongId,
+        splice_after_page_num: refPageNum,
       }).in('id', rows.map(r => r.id));
+
+      // Advance the reference to the song just spliced (its last page),
+      // so the NEXT group in this batch — even if a Follower mirrors it in
+      // a separate call — lands right after this one, not back at the
+      // original pre-batch position.
+      refSongId = song.id;
+      refPageNum = insertedCount; // pages are numbered 1..insertedCount
+
+      insertAt += insertedCount;
+      songInsertAt += 1;
+      addedTitles.push(rows.length > 1 ? `${song.title} (x${rows.length} requests)` : song.title);
     }
 
     if (addedTitles.length === 0) return;
