@@ -65,7 +65,7 @@
     border-radius: 999px;
     white-space: nowrap;
   }
-  #exit-btn, #fullscreen-btn {
+  #exit-btn, #fullscreen-btn, #add-song-btn {
     background: transparent;
     border: 1px solid #2a2e40;
     color: var(--muted);
@@ -297,6 +297,46 @@
     cursor: pointer;
   }
 
+  /* Master-only: search the full song database and manually insert a
+     chart into the running set (Travis's son's idea) */
+  .song-search-input-wrap { padding: 12px 18px 0; flex-shrink: 0; }
+  #song-search-input {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid #2a2e40;
+    background: #12141c;
+    color: var(--text);
+    font-size: 0.95rem;
+    box-sizing: border-box;
+  }
+  .song-search-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 0;
+    border-bottom: 1px solid #232741;
+    cursor: pointer;
+  }
+  .song-search-row:last-child { border-bottom: none; }
+  .song-search-row .title { font-weight: 700; font-size: 0.95rem; }
+  .song-search-row .artist { color: var(--muted); font-size: 0.8rem; }
+  .song-search-row .key { color: var(--muted); font-size: 0.8rem; white-space: nowrap; flex-shrink: 0; }
+  .song-search-empty { color: var(--muted); text-align: center; padding: 24px 10px; font-size: 0.9rem; }
+
+  .song-confirm-buttons { display: flex; gap: 10px; margin-top: 16px; }
+  .song-confirm-buttons button {
+    flex: 1;
+    padding: 13px 0;
+    border-radius: 10px;
+    font-weight: 700;
+    font-size: 1rem;
+    cursor: pointer;
+  }
+  .song-confirm-buttons .dismiss-btn { border: 1px solid #2a2e40; background: transparent; color: var(--text); }
+  .song-confirm-buttons .confirm-btn { border: none; background: var(--accent); color: #12141c; }
+
   .toast-stack {
     position: fixed;
     bottom: calc(70px + env(safe-area-inset-bottom));
@@ -375,6 +415,7 @@
     <div class="right">
       <div class="play-badge hidden" id="follower-badge">👥 Following</div>
       <div class="play-badge hidden" id="play-badge">played 0x tonight</div>
+      <button id="add-song-btn" class="hidden">🔍 Add Song</button>
       <button id="fullscreen-btn">⛶ Full Screen</button>
       <button id="exit-btn">Exit to Console</button>
     </div>
@@ -432,6 +473,32 @@
       <button id="request-info-close-btn">Got it — play the song</button>
     </div>
   </div>
+
+  <!-- Master-only: search the full song database, tap a song, confirm to
+       splice it into the set right after the current page. -->
+  <div class="drawer-overlay hidden" id="song-search-overlay">
+    <div class="drawer-panel">
+      <div class="drawer-header">
+        <h2>Add a Song</h2>
+        <button id="song-search-close-btn">Cancel</button>
+      </div>
+      <div class="song-search-input-wrap">
+        <input type="text" id="song-search-input" placeholder="Search title, artist, or key…" />
+      </div>
+      <div class="drawer-list" id="song-search-list"></div>
+    </div>
+  </div>
+
+  <div class="request-info-overlay hidden" id="song-confirm-overlay">
+    <div class="request-info-card">
+      <h2 id="song-confirm-title">Display this song?</h2>
+      <div class="sub" id="song-confirm-sub"></div>
+      <div class="song-confirm-buttons">
+        <button class="dismiss-btn" id="song-confirm-dismiss-btn">Dismiss</button>
+        <button class="confirm-btn" id="song-confirm-confirm-btn">Confirm</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -486,6 +553,16 @@
   const requestInfoListEl = document.getElementById('request-info-list');
   const requestInfoCloseBtn = document.getElementById('request-info-close-btn');
   const followerBadge = document.getElementById('follower-badge');
+  const addSongBtn = document.getElementById('add-song-btn');
+  const songSearchOverlay = document.getElementById('song-search-overlay');
+  const songSearchInput = document.getElementById('song-search-input');
+  const songSearchListEl = document.getElementById('song-search-list');
+  const songSearchCloseBtn = document.getElementById('song-search-close-btn');
+  const songConfirmOverlay = document.getElementById('song-confirm-overlay');
+  const songConfirmTitleEl = document.getElementById('song-confirm-title');
+  const songConfirmSubEl = document.getElementById('song-confirm-sub');
+  const songConfirmDismissBtn = document.getElementById('song-confirm-dismiss-btn');
+  const songConfirmConfirmBtn = document.getElementById('song-confirm-confirm-btn');
 
   let performer = null;
   let gig = null;
@@ -507,6 +584,13 @@
   // draining loop, since the real-time-feeling part comes from the
   // per-page-turn check, not this interval.
   const REQUEST_POLL_MS = 45000;
+
+  // Master-only "search & manually insert a song" state (see below). Full
+  // catalog is fetched lazily the first time the search overlay opens —
+  // solo performers and Followers who never touch this button never pay
+  // for the extra query.
+  let allSongs = null;
+  let songPendingConfirm = null;
 
   // Follower-only band-sync state (see checkForFollowerSplices() below).
   const processedSpliceIds = new Set(); // request ids already applied to this tablet's local stream
@@ -619,6 +703,7 @@
     await goToIndex(0, { record: false });
 
     if (role === 'master') {
+      addSongBtn.classList.remove('hidden');
       await refreshPendingRequests();
       requestPollTimer = setInterval(refreshPendingRequests, REQUEST_POLL_MS);
     } else {
@@ -660,12 +745,14 @@
     if (!gig) return;
     const { data } = await supabase
       .from('requests')
-      .select('song_id, status')
+      .select('song_id, status, is_manual')
       .eq('gig_session_id', gig.id)
       .in('status', ['pending', 'accepted']);
     requestCounts = {};
     (data || []).forEach(row => {
-      if (!row.song_id) return;
+      // A manually-added song (see the "search & insert" tool) isn't a
+      // crowd request at all — don't let it inflate "requested Nx tonight."
+      if (!row.song_id || row.is_manual) return;
       requestCounts[row.song_id] = (requestCounts[row.song_id] || 0) + 1;
     });
   }
@@ -712,6 +799,11 @@
     if (entry.requestInfo && entry.requestInfo.length && !entry.requestInfoShown) {
       entry.requestInfoShown = true;
       showRequestInfoBox(entry);
+    } else if (entry.manualAdd && !entry.manualAddShown) {
+      // A song manually inserted via the search tool (not a crowd
+      // request) — same show-once-per-entry mechanism, different box.
+      entry.manualAddShown = true;
+      showManualAddBox(entry);
     }
 
     songTitleEl.textContent = entry.song.title;
@@ -828,6 +920,19 @@
       `;
     }).join('');
 
+    requestInfoCloseBtn.textContent = 'Got it — play the song';
+    requestInfoOverlay.classList.remove('hidden');
+  }
+
+  // Same overlay/box as the request-info one above (only one of the two
+  // ever shows for a given entry — see renderCurrentPage()), just with
+  // different copy and no tip/note lines, for a song manually inserted
+  // via the search tool rather than accepted from the crowd.
+  function showManualAddBox(entry) {
+    requestInfoTitleEl.textContent = `🎸 "${entry.song.title}" was manually added`;
+    requestInfoSubEl.textContent = 'Dismiss and rock on! 🤘';
+    requestInfoListEl.innerHTML = '';
+    requestInfoCloseBtn.textContent = 'Dismiss — Rock On! 🤘';
     requestInfoOverlay.classList.remove('hidden');
   }
 
@@ -977,12 +1082,20 @@
 
   // Inserts one song's full chart (all pages) into pageStream at insertAt,
   // and the song itself into orderedSongs at songInsertAt. Shared by the
-  // Master (splicing a request it just accepted) and a Follower (mirroring
-  // a splice the Master already made — see checkForFollowerSplices()) so
-  // both end up building the exact same shape of entries. Returns how many
-  // pageStream entries were inserted, so callers can advance insertAt for
-  // the next song in the same batch.
-  async function insertSongAtIndex(song, requestInfo, insertAt, songInsertAt) {
+  // Master (splicing a request it just accepted, or a manually-added song
+  // — see below), and a Follower (mirroring either kind of splice the
+  // Master already made — see checkForFollowerSplices()), so all three
+  // paths end up building the exact same shape of entries.
+  // `extra` is either { requestInfo: [...] } for a real crowd request, or
+  // { manualAdd: true } for a song added via the search tool — exactly one
+  // of the two ever ends up on the first-page entry, driving which
+  // dismissible box (if either) renderCurrentPage() shows the first time
+  // the performer swipes onto it.
+  // Returns how many pageStream entries were inserted, so callers can
+  // advance insertAt for the next song in the same batch.
+  async function insertSongAtIndex(song, extra, insertAt, songInsertAt) {
+    const requestInfo = extra && extra.requestInfo;
+    const manualAdd = !!(extra && extra.manualAdd);
     const newEntries = [];
     try {
       const pdf = await window.pdfjsLib.getDocument(song.chart_url).promise;
@@ -991,19 +1104,161 @@
           song, pdf, pageNum: p, isFirstPageOfSong: p === 1, isLastPageOfSong: p === pdf.numPages,
           requestInfo: p === 1 ? requestInfo : undefined,
           requestInfoShown: false,
+          manualAdd: p === 1 ? manualAdd : undefined,
+          manualAddShown: false,
         });
       }
     } catch (err) {
-      console.error(`Could not load requested chart for "${song.title}"`, err);
+      console.error(`Could not load chart for "${song.title}"`, err);
       newEntries.push({
         song, pdf: null, pageNum: 1, isFirstPageOfSong: true, isLastPageOfSong: true,
         loadError: err && err.message ? err.message : 'Could not load this chart.',
         requestInfo, requestInfoShown: false,
+        manualAdd, manualAddShown: false,
       });
     }
     pageStream.splice(insertAt, 0, ...newEntries);
     orderedSongs.splice(songInsertAt, 0, song);
     return newEntries.length;
+  }
+
+  // ---------------- Master-only: search & manually insert a song ----------------
+  // Travis's son's idea: search the FULL song catalog (not just tonight's
+  // setlist — the whole point is pulling in something unplanned), pick a
+  // song, confirm, and it splices into the set on the very next page —
+  // synced to every Follower the same way an accepted crowd request is,
+  // by inserting a real (tagged) row into `requests` and reusing all the
+  // existing splice/sync machinery. See migration-manual-add-v1.sql for
+  // the requests.is_manual column this depends on, and why it has to be
+  // excluded from the crowd-facing request cap.
+
+  async function loadAllSongsForSearch() {
+    if (allSongs) return allSongs;
+    const { data } = await supabase
+      .from('songs')
+      .select('id, title, artist, song_key, key_with_capo, chart_url')
+      .eq('performer_id', performer.id)
+      .order('title');
+    allSongs = data || [];
+    return allSongs;
+  }
+
+  function renderSongSearchList(query) {
+    const q = query.trim().toLowerCase();
+    const matches = !q ? allSongs : allSongs.filter(s => {
+      const haystack = [s.title, s.artist, s.song_key, s.key_with_capo].filter(Boolean).join(' ').toLowerCase();
+      return haystack.includes(q);
+    });
+
+    if (matches.length === 0) {
+      songSearchListEl.innerHTML = '<div class="song-search-empty">No matching songs.</div>';
+      return;
+    }
+
+    songSearchListEl.innerHTML = matches.map(s => {
+      const keyLabel = formatKeyLabel(s);
+      return `
+        <div class="song-search-row" data-song-id="${s.id}">
+          <div>
+            <div class="title">${escapeHtml(s.title)}</div>
+            <div class="artist">${escapeHtml(s.artist || '')}</div>
+          </div>
+          ${keyLabel ? `<div class="key">${escapeHtml(keyLabel)}</div>` : ''}
+        </div>
+      `;
+    }).join('');
+
+    songSearchListEl.querySelectorAll('[data-song-id]').forEach(row => {
+      row.addEventListener('click', () => {
+        const song = allSongs.find(s => s.id === row.getAttribute('data-song-id'));
+        if (song) openSongConfirm(song);
+      });
+    });
+  }
+
+  async function openSongSearch() {
+    await loadAllSongsForSearch();
+    songSearchInput.value = '';
+    renderSongSearchList('');
+    songSearchOverlay.classList.remove('hidden');
+  }
+
+  function closeSongSearch() {
+    songSearchOverlay.classList.add('hidden');
+  }
+
+  function openSongConfirm(song) {
+    songPendingConfirm = song;
+    songConfirmTitleEl.textContent = 'Display this song?';
+    songConfirmSubEl.textContent = `"${song.title}"${song.artist ? ' — ' + song.artist : ''} will be added right after the page you're currently on, for everyone.`;
+    songConfirmOverlay.classList.remove('hidden');
+  }
+
+  function closeSongConfirm() {
+    songPendingConfirm = null;
+    songConfirmOverlay.classList.add('hidden');
+  }
+
+  addSongBtn.addEventListener('click', openSongSearch);
+  songSearchCloseBtn.addEventListener('click', closeSongSearch);
+  songSearchInput.addEventListener('input', () => renderSongSearchList(songSearchInput.value));
+
+  // Dismiss: nothing happens at all — closes both dialogs and leaves the
+  // set exactly as it was, per Travis's spec ("everything disappears and
+  // we're back to the same spot in the setlist").
+  songConfirmDismissBtn.addEventListener('click', () => {
+    closeSongConfirm();
+    closeSongSearch();
+  });
+
+  songConfirmConfirmBtn.addEventListener('click', async () => {
+    const song = songPendingConfirm;
+    if (!song) return;
+    closeSongConfirm();
+    closeSongSearch();
+    await insertManualSong(song);
+  });
+
+  // Inserts a manually-picked song right after the current page — for
+  // this (Master) tablet immediately, and for every Follower via the same
+  // requests-table + Realtime pipeline a real accepted request uses.
+  async function insertManualSong(song) {
+    const currentEntry = pageStream[currentIndex];
+    const insertAt = currentIndex + 1;
+    const songInsertAt = currentEntry
+      ? orderedSongs.findIndex(s => s.id === currentEntry.song.id) + 1
+      : orderedSongs.length;
+    const wasAtEnd = atEnd;
+
+    await insertSongAtIndex(song, { manualAdd: true }, insertAt, songInsertAt);
+
+    gig.runtime_order = orderedSongs.map(s => s.id);
+    await supabase.from('gig_sessions').update({ runtime_order: gig.runtime_order }).eq('id', gig.id);
+
+    await supabase.from('requests').insert({
+      gig_session_id: gig.id,
+      song_id: song.id,
+      tip_amount: 0,
+      note: null,
+      status: 'accepted',
+      spliced_at: new Date().toISOString(),
+      is_manual: true,
+      splice_after_song_id: currentEntry ? currentEntry.song.id : null,
+      splice_after_page_num: currentEntry ? currentEntry.pageNum : null,
+    });
+
+    songCountEl.textContent = orderedSongs.length;
+    showToast(`Added to the set: ${song.title} — up next`);
+
+    if (wasAtEnd) {
+      atEnd = false;
+      endScreen.classList.add('hidden');
+      topBar.classList.remove('hidden');
+      progressFooter.classList.remove('hidden');
+      canvas.classList.remove('hidden');
+      showChrome();
+      await goToIndex(currentIndex + 1, { record: false });
+    }
   }
 
   // Pulls every request accepted (from this drawer or a prior one) that
@@ -1064,7 +1319,7 @@
       // revisit (forward or backward).
       const requestInfo = rows.map(r => ({ tipAmount: r.tip_amount, note: r.note }));
 
-      const insertedCount = await insertSongAtIndex(song, requestInfo, insertAt, songInsertAt);
+      const insertedCount = await insertSongAtIndex(song, { requestInfo }, insertAt, songInsertAt);
       insertAt += insertedCount;
       songInsertAt += 1;
       addedTitles.push(rows.length > 1 ? `${song.title} (x${rows.length} requests)` : song.title);
@@ -1116,7 +1371,7 @@
 
     const { data, error } = await supabase
       .from('requests')
-      .select('id, song_id, spliced_at, splice_after_song_id, splice_after_page_num, tip_amount, note')
+      .select('id, song_id, spliced_at, splice_after_song_id, splice_after_page_num, tip_amount, note, is_manual')
       .eq('gig_session_id', gig.id)
       .not('spliced_at', 'is', null)
       .order('spliced_at', { ascending: true });
@@ -1139,6 +1394,7 @@
           songId: row.song_id,
           referenceSongId: row.splice_after_song_id,
           referencePageNum: row.splice_after_page_num,
+          isManual: row.is_manual,
           rows: [],
         };
         bySplicedAt.set(row.spliced_at, group);
@@ -1186,8 +1442,10 @@
         synced = true;
       }
 
-      const requestInfo = group.rows.map(r => ({ tipAmount: r.tip_amount, note: r.note }));
-      const insertedCount = await insertSongAtIndex(song, requestInfo, insertAt, songInsertAt);
+      const insertOptions = group.isManual
+        ? { manualAdd: true }
+        : { requestInfo: group.rows.map(r => ({ tipAmount: r.tip_amount, note: r.note })) };
+      const insertedCount = await insertSongAtIndex(song, insertOptions, insertAt, songInsertAt);
       insertAt += insertedCount;
       songInsertAt += 1;
     }
@@ -1196,7 +1454,7 @@
 
     gig.runtime_order = orderedSongs.map(s => s.id);
     songCountEl.textContent = orderedSongs.length;
-    showToast('Synced with the Master — new request added to the set');
+    showToast('Synced with the Master — new song added to the set');
 
     if (wasAtEnd) {
       atEnd = false;
