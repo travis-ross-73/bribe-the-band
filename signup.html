@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Bribe The Band — Sign Up</title>
+<style>
+  :root {
+    --bg: #12141c;
+    --card: #1b1e2b;
+    --accent: #f2b134;
+    --accent-dark: #d99a1f;
+    --text: #f4f4f6;
+    --muted: #9a9db0;
+    --success: #4caf7d;
+    --danger: #e0616b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+  main {
+    max-width: 440px;
+    margin: 0 auto;
+    padding: 48px 20px 60px;
+  }
+  h1 { text-align: center; margin-bottom: 6px; font-size: 1.5rem; }
+  .subhead { text-align: center; color: var(--muted); font-size: 0.9rem; margin-bottom: 28px; }
+  section {
+    background: var(--card);
+    border: 1px solid #2a2e40;
+    border-radius: 12px;
+    padding: 22px 20px;
+  }
+  label {
+    display: block;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--muted);
+    margin-bottom: 5px;
+    margin-top: 14px;
+  }
+  label:first-of-type { margin-top: 0; }
+  input {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid #2a2e40;
+    background: #12141c;
+    color: var(--text);
+    font-size: 0.95rem;
+  }
+  input:focus { outline: none; border-color: var(--accent-dark); }
+  .handle-input-row { display: flex; align-items: center; gap: 6px; }
+  .handle-prefix { color: var(--muted); font-size: 0.85rem; white-space: nowrap; }
+  .field-note { font-size: 0.78rem; margin-top: 5px; min-height: 1.1em; }
+  .field-note.ok { color: var(--success); }
+  .field-note.err { color: var(--danger); }
+  .field-note.muted { color: var(--muted); }
+  button.primary {
+    width: 100%;
+    background: var(--accent);
+    color: #12141c;
+    border: none;
+    border-radius: 8px;
+    padding: 13px 16px;
+    font-weight: 700;
+    font-size: 0.98rem;
+    cursor: pointer;
+    margin-top: 22px;
+  }
+  button.primary:disabled { opacity: 0.5; cursor: default; }
+  .error-msg { color: var(--danger); font-size: 0.85rem; margin-top: 10px; }
+  .success-box {
+    text-align: center;
+    padding: 8px 0 4px;
+  }
+  .success-box .icon { font-size: 2rem; margin-bottom: 8px; }
+  .success-box p { color: var(--muted); font-size: 0.92rem; line-height: 1.5; }
+  .login-link { text-align: center; margin-top: 18px; font-size: 0.85rem; color: var(--muted); }
+  .login-link a { color: var(--accent); text-decoration: none; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<main>
+  <h1>🎤 Join Bribe The Band</h1>
+  <div class="subhead">Song requests, tips, and a live chart viewer for your gigs.</div>
+
+  <section id="signup-form-section">
+    <label for="su-display-name">Your name / band name</label>
+    <input type="text" id="su-display-name" placeholder="e.g. Ten Cent Prophet" />
+
+    <label for="su-handle">Your page's web address</label>
+    <div class="handle-input-row">
+      <span class="handle-prefix" id="handle-domain-prefix">bribetheband.live/</span>
+      <input type="text" id="su-handle" placeholder="your-handle" />
+    </div>
+    <div class="field-note" id="handle-note"></div>
+
+    <label for="su-email">Email</label>
+    <input type="email" id="su-email" placeholder="you@example.com" />
+
+    <label for="su-password">Password</label>
+    <input type="password" id="su-password" placeholder="At least 8 characters" />
+
+    <label for="su-promo">Promo / referral code (optional)</label>
+    <input type="text" id="su-promo" placeholder="Have a code? Enter it here" />
+    <div class="field-note" id="promo-note"></div>
+
+    <button class="primary" id="signup-btn">Create My Account</button>
+    <div class="error-msg" id="signup-error"></div>
+
+    <div class="login-link">Already have an account? <a href="console.html">Log in here</a></div>
+  </section>
+
+  <section id="signup-success-section" class="hidden">
+    <div class="success-box">
+      <div class="icon">🎉</div>
+      <p id="success-message"></p>
+    </div>
+  </section>
+</main>
+
+<script type="module">
+  import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+  const SUPABASE_URL = 'https://ykvpjeiakvgihpxektcf.supabase.co';
+  const SUPABASE_ANON_KEY = 'sb_publishable_g4w52upNnalAllmn8_8vRA_G6Hj-tlM';
+  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  // Blocks a handle from colliding with the app's own routes/files. Keep in
+  // sync with the reserved-word list in 01-ARCHITECTURE-AND-DATA-MODEL.md —
+  // 'signup'/'signup.html' were added to that list when this page was built.
+  const RESERVED_HANDLES = [
+    'console', 'console.html', 'viewer', 'viewer.html', 'login', 'admin',
+    'api', 'request', 'request.html', 'index.html', 'manifest.json', 'www',
+    'signup', 'signup.html',
+  ];
+
+  const displayNameInput = document.getElementById('su-display-name');
+  const handleInput = document.getElementById('su-handle');
+  const handleNote = document.getElementById('handle-note');
+  const emailInput = document.getElementById('su-email');
+  const passwordInput = document.getElementById('su-password');
+  const promoInput = document.getElementById('su-promo');
+  const promoNote = document.getElementById('promo-note');
+  const signupBtn = document.getElementById('signup-btn');
+  const signupError = document.getElementById('signup-error');
+  const formSection = document.getElementById('signup-form-section');
+  const successSection = document.getElementById('signup-success-section');
+  const successMessage = document.getElementById('success-message');
+
+  // Pre-fill a promo/referral code from a shared affiliate link, e.g.
+  // signup.html?ref=SOMEBAND15 — Travis's own ask: "I will manually set
+  // [affiliates] up, but will need to be able to give them a link and/or
+  // code." A link just pre-fills the same code field a manually-shared
+  // code would be typed into.
+  const urlParams = new URLSearchParams(window.location.search);
+  const refCode = urlParams.get('ref') || urlParams.get('code');
+  if (refCode) {
+    promoInput.value = refCode;
+  }
+
+  let handleValid = false;
+  let handleCheckTimer = null;
+
+  function slugifyHandle(raw) {
+    return raw.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '');
+  }
+
+  function setHandleNote(text, cls) {
+    handleNote.textContent = text;
+    handleNote.className = 'field-note' + (cls ? ' ' + cls : '');
+  }
+
+  async function checkHandle() {
+    const raw = handleInput.value.trim();
+    handleValid = false;
+    if (!raw) { setHandleNote('', ''); return; }
+
+    const cleaned = slugifyHandle(raw);
+    if (cleaned !== raw.toLowerCase()) {
+      setHandleNote('Lowercase letters, numbers, and hyphens only.', 'err');
+      return;
+    }
+    if (cleaned.length < 3) {
+      setHandleNote('At least 3 characters.', 'err');
+      return;
+    }
+    if (RESERVED_HANDLES.includes(cleaned)) {
+      setHandleNote('That address is reserved — try another.', 'err');
+      return;
+    }
+
+    setHandleNote('Checking availability…', 'muted');
+    const { data, error } = await supabase
+      .from('performers')
+      .select('id')
+      .eq('handle', cleaned)
+      .maybeSingle();
+
+    if (error) {
+      setHandleNote('Could not check availability right now.', 'err');
+      return;
+    }
+    if (data) {
+      setHandleNote('That address is already taken.', 'err');
+      return;
+    }
+    setHandleNote('Available!', 'ok');
+    handleValid = true;
+  }
+
+  handleInput.addEventListener('input', () => {
+    clearTimeout(handleCheckTimer);
+    handleCheckTimer = setTimeout(checkHandle, 400);
+  });
+
+  // Live promo-code validation via the SECURITY DEFINER function — never
+  // reads promo_codes directly (affiliate commission terms aren't meant to
+  // be publicly readable), only ever sees the customer-facing outcome.
+  let promoCheckTimer = null;
+  let validatedPromo = null; // the exact code string that last validated true
+
+  async function checkPromoCode() {
+    const code = promoInput.value.trim();
+    validatedPromo = null;
+    if (!code) { promoNote.textContent = ''; promoNote.className = 'field-note'; return; }
+
+    promoNote.textContent = 'Checking code…';
+    promoNote.className = 'field-note muted';
+    const { data, error } = await supabase.rpc('validate_promo_code', { p_code: code });
+    const result = Array.isArray(data) ? data[0] : data;
+
+    if (error || !result) {
+      promoNote.textContent = 'Could not check that code right now.';
+      promoNote.className = 'field-note err';
+      return;
+    }
+    if (!result.valid) {
+      promoNote.textContent = result.message || 'That code is not valid.';
+      promoNote.className = 'field-note err';
+      return;
+    }
+    promoNote.textContent = result.message || 'Code applied.';
+    promoNote.className = 'field-note ok';
+    validatedPromo = code;
+  }
+
+  promoInput.addEventListener('input', () => {
+    clearTimeout(promoCheckTimer);
+    promoCheckTimer = setTimeout(checkPromoCode, 400);
+  });
+  if (refCode) checkPromoCode();
+
+  signupBtn.addEventListener('click', async () => {
+    signupError.textContent = '';
+
+    const displayName = displayNameInput.value.trim();
+    const handle = slugifyHandle(handleInput.value.trim());
+    const email = emailInput.value.trim();
+    const password = passwordInput.value;
+    // Only actually apply a promo code if it's the exact one that last
+    // came back valid — avoids applying a stale/edited code that was
+    // never (re)checked (e.g. typed, validated, then edited without
+    // waiting for the debounce to re-check).
+    const promoCode = (promoInput.value.trim() === validatedPromo) ? validatedPromo : null;
+
+    if (!displayName) { signupError.textContent = 'Enter your name or band name.'; return; }
+    if (!handleValid) { signupError.textContent = 'Choose an available web address first.'; return; }
+    if (!email) { signupError.textContent = 'Enter your email.'; return; }
+    if (!password || password.length < 8) { signupError.textContent = 'Password must be at least 8 characters.'; return; }
+
+    signupBtn.disabled = true;
+    signupBtn.textContent = 'Creating your account…';
+
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          handle,
+          display_name: displayName,
+          promo_code: promoCode,
+        },
+      },
+    });
+
+    signupBtn.disabled = false;
+    signupBtn.textContent = 'Create My Account';
+
+    if (error) {
+      signupError.textContent = error.message;
+      return;
+    }
+
+    formSection.classList.add('hidden');
+    successSection.classList.remove('hidden');
+
+    // Whether there's an active session immediately depends on this
+    // Supabase project's "confirm email" setting — if it's on, signUp()
+    // succeeds but returns no session until the confirmation link is
+    // clicked. Either way, the performers row is already created (by the
+    // handle_new_performer_signup trigger — see migration-signup-v1.sql),
+    // so once they're actually logged in, console.html will find it.
+    if (data.session) {
+      successMessage.textContent = `You're all set! Your page is bribetheband.live/${handle}. Redirecting you to the console…`;
+      setTimeout(() => { window.location.href = 'console.html'; }, 2500);
+    } else {
+      successMessage.textContent = `Almost there — check your email to confirm your account, then log into the console. Your page will be bribetheband.live/${handle}.`;
+    }
+  });
+</script>
+
+</body>
+</html>
