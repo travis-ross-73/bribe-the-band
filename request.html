@@ -104,9 +104,12 @@
   }
   .song-row:hover { border-color: var(--accent); }
   .song-row.selected { border-color: var(--accent); background: #232741; }
+  .song-row.capped { cursor: default; opacity: 0.5; }
+  .song-row.capped:hover { border-color: #2a2e40; }
   .song-title { font-weight: 600; font-size: 1rem; }
   .song-artist { color: var(--muted); font-size: 0.85rem; margin-top: 2px; }
   .req-arrow { color: var(--accent); font-size: 1.3rem; font-weight: 700; }
+  .capped-note { color: var(--accent); font-size: 0.78rem; margin-top: 3px; font-weight: 600; }
 
   #request-panel {
     position: fixed;
@@ -266,6 +269,8 @@
   let selectedSong = null; // null when this is a tip-only request
   let selectedTip = null;  // number, or 'custom'
   let isTipOnly = false;
+  let cappedSongIds = new Set(); // song ids that have hit their nightly request cap
+  const CAP_POLL_MS = 30000;
 
   const statusBanner = document.getElementById('status-banner');
   const tipOnlyCard = document.getElementById('tip-only-card');
@@ -334,7 +339,43 @@
 
     songs = songData;
     statusBanner.classList.add('hidden');
+    await refreshCapStatus();
     renderSongs(songs);
+    setInterval(refreshCapStatus, CAP_POLL_MS);
+  }
+
+  // Asks the DB (via a SECURITY DEFINER function, since anon users can't
+  // read raw `requests` rows) which songs have already hit the nightly
+  // request cap the performer set in the console. Blank/no cap = never capped.
+  async function refreshCapStatus() {
+    if (!gigSession) return;
+    const { data, error } = await supabase.rpc('get_song_request_status', {
+      p_gig_session_id: gigSession.id
+    });
+    if (error) {
+      console.error('Could not load request-cap status', error);
+      return;
+    }
+    const nextCapped = new Set();
+    (data || []).forEach(row => {
+      if (row.is_capped) nextCapped.add(row.song_id);
+    });
+    const changed = nextCapped.size !== cappedSongIds.size ||
+      [...nextCapped].some(id => !cappedSongIds.has(id));
+    cappedSongIds = nextCapped;
+    if (changed) {
+      // Re-render with whatever filter the user currently has typed.
+      const q = searchEl.value.trim().toLowerCase();
+      const filtered = q
+        ? songs.filter(s => s.title.toLowerCase().includes(q) || s.artist.toLowerCase().includes(q))
+        : songs;
+      renderSongs(filtered);
+      // If the panel is open for a song that just got capped out from under
+      // the user, close it rather than let them submit into a dead end.
+      if (selectedSong && cappedSongIds.has(selectedSong.id) && panel.classList.contains('open')) {
+        panel.classList.remove('open');
+      }
+    }
   }
 
   function renderSongs(list) {
@@ -345,15 +386,19 @@
     }
     for (const song of list) {
       const row = document.createElement('div');
-      row.className = 'song-row';
+      const capped = cappedSongIds.has(song.id);
+      row.className = capped ? 'song-row capped' : 'song-row';
       row.innerHTML = `
         <div>
           <div class="song-title">${escapeHtml(song.title)}</div>
           <div class="song-artist">${escapeHtml(song.artist)}</div>
+          ${capped ? '<div class="capped-note">Already requested plenty tonight — try another! 🎶</div>' : ''}
         </div>
-        <div class="req-arrow">+</div>
+        <div class="req-arrow">${capped ? '' : '+'}</div>
       `;
-      row.addEventListener('click', () => openRequestPanel(song));
+      if (!capped) {
+        row.addEventListener('click', () => openRequestPanel(song));
+      }
       songListEl.appendChild(row);
     }
   }
@@ -434,6 +479,17 @@
   submitBtn.addEventListener('click', async () => {
     if (selectedTip === null || !gigSession) return;
     if (selectedTip === 'custom' && !(parseFloat(customTipInput.value) > 0)) return;
+
+    // Last-second safety check: the song could have hit its cap in the
+    // moments between opening this panel and hitting Send.
+    if (selectedSong) {
+      await refreshCapStatus();
+      if (cappedSongIds.has(selectedSong.id)) {
+        panel.classList.remove('open');
+        alert(`Looks like "${selectedSong.title}" has already been requested plenty tonight — try another song!`);
+        return;
+      }
+    }
 
     submitBtn.disabled = true;
     submitBtn.textContent = 'Sending…';
