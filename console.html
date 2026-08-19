@@ -358,11 +358,18 @@
       <button id="start-set-btn" disabled>Start the Set</button>
 
       <div id="gig-caps-panel" class="hidden">
-        <h3>Nightly Request Caps</h3>
-        <div class="section-sub">Block new requests for a song once it's been requested this many times tonight. Leave blank for no limit. These carry over from your last gig automatically — tweak as needed for tonight.</div>
-        <div id="gig-caps-list"></div>
+        <h3>Nightly Request Cap</h3>
+        <div class="section-sub">One limit, applied to every song tonight — once a song has been requested this many times, the crowd page blocks new requests for it (with a friendly message) until you start a new gig, or hit "Reset" below. Leave blank for no limit. Carries over from your last gig automatically — tweak as needed for tonight.</div>
+        <div class="gig-cap-row">
+          <div>
+            <div class="gig-cap-title">Max requests per song</div>
+            <div class="gig-cap-artist">Applies to every song in tonight's gig equally.</div>
+          </div>
+          <input type="number" min="1" step="1" id="gig-cap-input" placeholder="No limit" />
+        </div>
         <div class="button-row">
-          <button class="secondary" id="save-gig-caps-btn">Save Caps for Tonight</button>
+          <button class="secondary" id="save-gig-caps-btn">Save Cap for Tonight</button>
+          <button class="secondary" id="reset-gig-caps-btn">Reset Request Counts</button>
         </div>
         <div class="manage-song-status" id="gig-caps-status"></div>
       </div>
@@ -476,8 +483,9 @@
   const startSetBtn = document.getElementById('start-set-btn');
   const requestListEl = document.getElementById('request-list');
   const gigCapsPanel = document.getElementById('gig-caps-panel');
-  const gigCapsListEl = document.getElementById('gig-caps-list');
+  const gigCapInput = document.getElementById('gig-cap-input');
   const saveGigCapsBtn = document.getElementById('save-gig-caps-btn');
+  const resetGigCapsBtn = document.getElementById('reset-gig-caps-btn');
   const gigCapsStatus = document.getElementById('gig-caps-status');
 
   const editingBanner = document.getElementById('editing-banner');
@@ -580,7 +588,7 @@
   async function loadActiveGig() {
     const { data } = await supabase
       .from('gig_sessions')
-      .select('id, gig_code, active_setlist_id, runtime_order, song_caps, status, created_at')
+      .select('id, gig_code, active_setlist_id, runtime_order, request_cap, cap_reset_at, status, created_at')
       .eq('performer_id', performer.id)
       .eq('status', 'active')
       .order('created_at', { ascending: false })
@@ -604,57 +612,34 @@
     renderGigCapsPanel();
   }
 
-  // ---------------- Request caps: per-gig, per-song nightly limits ----------------
-  // The cap is scoped to a single gig (tonight's show), not the song's
-  // catalog entry — Travis wants to be able to raise/lower it night to
-  // night, so it lives on gig_sessions.song_caps (a jsonb map of
-  // song_id -> integer cap) rather than on the song itself.
+  // ---------------- Request cap: one number, applied to every song, per gig ----------------
+  // A single limit for the whole gig — every song can be requested up to
+  // this many times before the crowd page blocks it. Scoped to the gig
+  // (gig_sessions.request_cap), not the song, so it's easy to raise or
+  // lower night to night without touching the song catalog. cap_reset_at
+  // lets Travis "zero out" tonight's counts mid-gig (e.g. the room's
+  // bigger than expected) without having to end the gig and lose the
+  // running order / request queue.
   function renderGigCapsPanel() {
-    if (!activeGig || !activeGig.runtime_order || activeGig.runtime_order.length === 0) {
+    if (!activeGig) {
       gigCapsPanel.classList.add('hidden');
       return;
     }
     gigCapsPanel.classList.remove('hidden');
     gigCapsStatus.textContent = '';
-
-    const caps = activeGig.song_caps || {};
-    // Only one row per song, in tonight's running order, even if it
-    // appears more than once (shouldn't normally happen, but be safe).
-    const seen = new Set();
-    const rows = [];
-    for (const songId of activeGig.runtime_order) {
-      if (seen.has(songId)) continue;
-      seen.add(songId);
-      const song = songs.find(s => s.id === songId);
-      if (!song) continue;
-      rows.push(song);
-    }
-
-    gigCapsListEl.innerHTML = rows.map(song => `
-      <div class="gig-cap-row" data-song="${song.id}">
-        <div>
-          <div class="gig-cap-title">${escapeHtml(song.title)}</div>
-          <div class="gig-cap-artist">${escapeHtml(song.artist)}</div>
-        </div>
-        <input type="number" min="1" step="1" data-cap-input value="${caps[song.id] ?? ''}" placeholder="No limit" />
-      </div>
-    `).join('');
+    gigCapInput.value = activeGig.request_cap ?? '';
   }
 
   saveGigCapsBtn.addEventListener('click', async () => {
     if (!activeGig) return;
-    const newCaps = {};
-    gigCapsListEl.querySelectorAll('[data-song]').forEach(row => {
-      const songId = row.getAttribute('data-song');
-      const raw = row.querySelector('[data-cap-input]').value.trim();
-      if (raw) newCaps[songId] = parseInt(raw, 10);
-    });
+    const raw = gigCapInput.value.trim();
+    const newCap = raw ? parseInt(raw, 10) : null;
 
     gigCapsStatus.textContent = 'Saving…';
     gigCapsStatus.className = 'manage-song-status';
     const { error } = await supabase
       .from('gig_sessions')
-      .update({ song_caps: newCaps })
+      .update({ request_cap: newCap })
       .eq('id', activeGig.id);
 
     if (error) {
@@ -662,8 +647,30 @@
       gigCapsStatus.className = 'manage-song-status err';
       return;
     }
-    activeGig.song_caps = newCaps;
+    activeGig.request_cap = newCap;
     gigCapsStatus.textContent = 'Saved for tonight.';
+    gigCapsStatus.className = 'manage-song-status ok';
+  });
+
+  resetGigCapsBtn.addEventListener('click', async () => {
+    if (!activeGig) return;
+    if (!confirm('Reset every song\'s request count back to zero for tonight? The cap itself stays the same — this just gives every song a fresh count.')) return;
+
+    gigCapsStatus.textContent = 'Resetting…';
+    gigCapsStatus.className = 'manage-song-status';
+    const nowIso = new Date().toISOString();
+    const { error } = await supabase
+      .from('gig_sessions')
+      .update({ cap_reset_at: nowIso })
+      .eq('id', activeGig.id);
+
+    if (error) {
+      gigCapsStatus.textContent = 'Could not reset: ' + error.message;
+      gigCapsStatus.className = 'manage-song-status err';
+      return;
+    }
+    activeGig.cap_reset_at = nowIso;
+    gigCapsStatus.textContent = 'Request counts reset for tonight.';
     gigCapsStatus.className = 'manage-song-status ok';
   });
 
@@ -1421,17 +1428,19 @@
     const setlistId = setlistPicker.value;
     if (!setlistId) { alert('Pick (or save) a setlist first.'); return; }
 
-    // Carry forward the most recent gig's request caps, so recurring
-    // songs don't need their limit re-entered every single night — Travis
-    // can still tweak them for tonight in the caps panel once it loads.
+    // Carry forward the most recent gig's request cap, so it doesn't need
+    // re-entering every single night — Travis can still tweak it for
+    // tonight in the caps panel once it loads. A new gig always starts
+    // with a fresh (uncapped-by-reset) count, since requests are scoped to
+    // this brand-new gig_session_id.
     const { data: lastGig } = await supabase
       .from('gig_sessions')
-      .select('song_caps')
+      .select('request_cap')
       .eq('performer_id', performer.id)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
-    const carriedCaps = (lastGig && lastGig.song_caps) || {};
+    const carriedCap = (lastGig && lastGig.request_cap) ?? null;
 
     // End any currently active gig for this performer
     await supabase
@@ -1448,7 +1457,7 @@
       performer_id: performer.id,
       active_setlist_id: setlistId,
       runtime_order: setlist ? setlist.song_ids : [],
-      song_caps: carriedCaps,
+      request_cap: carriedCap,
       status: 'active'
     });
     if (error) { alert('Could not start gig: ' + error.message); return; }
