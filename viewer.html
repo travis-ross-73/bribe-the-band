@@ -250,6 +250,53 @@
   .drawer-row .actions .decline-btn { background: transparent; border: 1px solid #2a2e40; color: var(--muted); }
   .drawer-row .actions .ack-btn { background: transparent; border: 1px solid #2a2e40; color: var(--text); }
 
+  .request-info-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    background: rgba(5, 6, 10, 0.72);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .request-info-card {
+    width: 100%;
+    max-width: 460px;
+    max-height: 80vh;
+    overflow-y: auto;
+    background: var(--card);
+    border: 1px solid #2a2e40;
+    border-radius: 16px;
+    padding: 22px;
+  }
+  .request-info-card h2 { margin: 0 0 4px; font-size: 1.15rem; }
+  .request-info-card .sub { color: var(--muted); font-size: 0.85rem; margin-bottom: 14px; }
+  .request-info-line {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid #232741;
+  }
+  .request-info-line:last-child { border-bottom: none; }
+  .request-info-line .note { flex: 1; font-size: 0.95rem; }
+  .request-info-line .note em { color: var(--muted); font-style: normal; }
+  .request-info-line .tip { color: var(--accent); font-weight: 700; white-space: nowrap; }
+  #request-info-close-btn {
+    margin-top: 16px;
+    width: 100%;
+    padding: 13px 0;
+    border: none;
+    border-radius: 10px;
+    background: var(--accent);
+    color: #12141c;
+    font-weight: 700;
+    font-size: 1rem;
+    cursor: pointer;
+  }
+
   .toast-stack {
     position: fixed;
     bottom: calc(70px + env(safe-area-inset-bottom));
@@ -375,6 +422,15 @@
   </div>
 
   <div class="toast-stack" id="toast-stack"></div>
+
+  <div class="request-info-overlay hidden" id="request-info-overlay">
+    <div class="request-info-card">
+      <h2 id="request-info-title">Requested by the crowd</h2>
+      <div class="sub" id="request-info-sub"></div>
+      <div id="request-info-list"></div>
+      <button id="request-info-close-btn">Got it — play the song</button>
+    </div>
+  </div>
 </div>
 
 <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -413,6 +469,11 @@
   const drawerCloseBtn = document.getElementById('drawer-close-btn');
   const drawerListEl = document.getElementById('drawer-list');
   const toastStack = document.getElementById('toast-stack');
+  const requestInfoOverlay = document.getElementById('request-info-overlay');
+  const requestInfoTitleEl = document.getElementById('request-info-title');
+  const requestInfoSubEl = document.getElementById('request-info-sub');
+  const requestInfoListEl = document.getElementById('request-info-list');
+  const requestInfoCloseBtn = document.getElementById('request-info-close-btn');
 
   let performer = null;
   let gig = null;
@@ -607,6 +668,15 @@
     const entry = pageStream[currentIndex];
     if (!entry) return;
 
+    // Show the "this song was requested" box the first time (and only the
+    // first time — forward or backward doesn't matter) the performer lands
+    // on the first page of a spliced-in requested song. requestInfo only
+    // ever lives on that first-page entry (see spliceAcceptedRequests()).
+    if (entry.requestInfo && entry.requestInfo.length && !entry.requestInfoShown) {
+      entry.requestInfoShown = true;
+      showRequestInfoBox(entry);
+    }
+
     songTitleEl.textContent = entry.song.title;
     const keyBits = [];
     if (entry.song.song_key) keyBits.push(entry.song.song_key);
@@ -687,6 +757,46 @@
     toastStack.appendChild(el);
     setTimeout(() => el.remove(), 5000);
   }
+
+  // Formats a tip amount like "$5" (no trailing ".00", but keeps cents when
+  // they matter, e.g. "$4.50").
+  function formatTip(amount) {
+    const n = Number(amount);
+    if (!n || n <= 0) return '';
+    return '$' + (Number.isInteger(n) ? n : n.toFixed(2));
+  }
+
+  // Shows the dismissible "this song was requested" box: one line per
+  // request tied to this song (a song requested by several people shows
+  // several lines), each with its tip and note. Stays open until the
+  // performer taps the close button — gives them a moment to say thanks
+  // and call out who it's for before playing.
+  function showRequestInfoBox(entry) {
+    const rows = entry.requestInfo || [];
+    if (rows.length === 0) return;
+
+    requestInfoTitleEl.textContent = `🎤 "${entry.song.title}" was requested`;
+    requestInfoSubEl.textContent = rows.length > 1
+      ? `${rows.length} requests for this song tonight — say thanks, then close this to play it.`
+      : 'Say thanks, then close this to play it.';
+
+    requestInfoListEl.innerHTML = rows.map(r => {
+      const tipText = formatTip(r.tipAmount);
+      const noteText = r.note ? escapeHtml(r.note) : '<em>No note left</em>';
+      return `
+        <div class="request-info-line">
+          <div class="note">${noteText}</div>
+          ${tipText ? `<div class="tip">${tipText}</div>` : ''}
+        </div>
+      `;
+    }).join('');
+
+    requestInfoOverlay.classList.remove('hidden');
+  }
+
+  requestInfoCloseBtn.addEventListener('click', () => {
+    requestInfoOverlay.classList.add('hidden');
+  });
 
   // ---------------- Live request drawer (Stage 2, phase 2) ----------------
   // Incoming requests show as a count-only badge; the performer opens the
@@ -835,7 +945,7 @@
   async function spliceAcceptedRequests() {
     const { data, error } = await supabase
       .from('requests')
-      .select('id, song_id')
+      .select('id, song_id, tip_amount, note')
       .eq('gig_session_id', gig.id)
       .eq('status', 'accepted')
       .is('spliced_at', null)
@@ -874,17 +984,30 @@
         continue;
       }
 
+      // Carried on the FIRST page entry only — this is what drives the
+      // dismissible "here's who requested this / what they tipped / what
+      // they said" box the moment the performer swipes onto this song.
+      // requestInfoShown starts false and flips to true the first time
+      // renderCurrentPage() displays it, so it never reappears on a later
+      // revisit (forward or backward).
+      const requestInfo = rows.map(r => ({ tipAmount: r.tip_amount, note: r.note }));
+
       const newEntries = [];
       try {
         const pdf = await window.pdfjsLib.getDocument(song.chart_url).promise;
         for (let p = 1; p <= pdf.numPages; p++) {
-          newEntries.push({ song, pdf, pageNum: p, isFirstPageOfSong: p === 1, isLastPageOfSong: p === pdf.numPages });
+          newEntries.push({
+            song, pdf, pageNum: p, isFirstPageOfSong: p === 1, isLastPageOfSong: p === pdf.numPages,
+            requestInfo: p === 1 ? requestInfo : undefined,
+            requestInfoShown: false,
+          });
         }
       } catch (err) {
         console.error(`Could not load requested chart for "${song.title}"`, err);
         newEntries.push({
           song, pdf: null, pageNum: 1, isFirstPageOfSong: true, isLastPageOfSong: true,
           loadError: err && err.message ? err.message : 'Could not load this chart.',
+          requestInfo, requestInfoShown: false,
         });
       }
 
