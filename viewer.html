@@ -373,6 +373,7 @@
       <div class="sub" id="song-sub">—</div>
     </div>
     <div class="right">
+      <div class="play-badge hidden" id="follower-badge">👥 Following</div>
       <div class="play-badge hidden" id="play-badge">played 0x tonight</div>
       <button id="fullscreen-btn">⛶ Full Screen</button>
       <button id="exit-btn">Exit to Console</button>
@@ -443,6 +444,16 @@
 
   window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
+  // Band-sync roles: every tablet shares the same login and loads the same
+  // gig, but only one — the Master — runs the live request drawer and
+  // accepts/declines. Every other tablet is a Follower: no drawer, no
+  // badge, just charts, and it mirrors whatever the Master splices in
+  // (see checkForFollowerSplices() below). A true solo performer never
+  // passes ?role=follower to anything, so nothing here changes for them —
+  // they're always Master, same as before this feature existed.
+  const urlParams = new URLSearchParams(window.location.search);
+  const role = urlParams.get('role') === 'follower' ? 'follower' : 'master';
+
   const topBar = document.getElementById('top-bar');
   const songTitleEl = document.getElementById('song-title');
   const songSubEl = document.getElementById('song-sub');
@@ -474,6 +485,7 @@
   const requestInfoSubEl = document.getElementById('request-info-sub');
   const requestInfoListEl = document.getElementById('request-info-list');
   const requestInfoCloseBtn = document.getElementById('request-info-close-btn');
+  const followerBadge = document.getElementById('follower-badge');
 
   let performer = null;
   let gig = null;
@@ -495,6 +507,13 @@
   // draining loop, since the real-time-feeling part comes from the
   // per-page-turn check, not this interval.
   const REQUEST_POLL_MS = 45000;
+
+  // Follower-only band-sync state (see checkForFollowerSplices() below).
+  const processedSpliceIds = new Set(); // request ids already applied to this tablet's local stream
+  let followerSyncTimer = null;
+  // Realtime does the real work here (near-instant), this is just a safety
+  // net in case a realtime event gets missed (e.g. a brief reconnect).
+  const FOLLOWER_SYNC_POLL_MS = 15000;
 
   // Header/footer behave like Apple Books' top bar: visible briefly, then
   // fade away so the chart can fill the whole screen, reappearing on a tap
@@ -599,8 +618,26 @@
     showChrome();
     await goToIndex(0, { record: false });
 
-    await refreshPendingRequests();
-    requestPollTimer = setInterval(refreshPendingRequests, REQUEST_POLL_MS);
+    if (role === 'master') {
+      await refreshPendingRequests();
+      requestPollTimer = setInterval(refreshPendingRequests, REQUEST_POLL_MS);
+    } else {
+      // Follower: no request drawer here at all — just mirror whatever the
+      // Master splices in. Seed the "already applied" set with every
+      // request that's already spliced as of page load (including
+      // anything the Master accepted before this tablet joined), so only
+      // genuinely new splices from this point forward get mirrored.
+      followerBadge.classList.remove('hidden');
+      const { data: alreadySpliced } = await supabase
+        .from('requests')
+        .select('id')
+        .eq('gig_session_id', gig.id)
+        .not('spliced_at', 'is', null);
+      (alreadySpliced || []).forEach(r => processedSpliceIds.add(r.id));
+
+      setupFollowerRealtime();
+      followerSyncTimer = setInterval(checkForFollowerSplices, FOLLOWER_SYNC_POLL_MS);
+    }
   }
 
   function showOnly(screenEl) {
@@ -938,10 +975,45 @@
     await spliceAcceptedRequests();
   }
 
+  // Inserts one song's full chart (all pages) into pageStream at insertAt,
+  // and the song itself into orderedSongs at songInsertAt. Shared by the
+  // Master (splicing a request it just accepted) and a Follower (mirroring
+  // a splice the Master already made — see checkForFollowerSplices()) so
+  // both end up building the exact same shape of entries. Returns how many
+  // pageStream entries were inserted, so callers can advance insertAt for
+  // the next song in the same batch.
+  async function insertSongAtIndex(song, requestInfo, insertAt, songInsertAt) {
+    const newEntries = [];
+    try {
+      const pdf = await window.pdfjsLib.getDocument(song.chart_url).promise;
+      for (let p = 1; p <= pdf.numPages; p++) {
+        newEntries.push({
+          song, pdf, pageNum: p, isFirstPageOfSong: p === 1, isLastPageOfSong: p === pdf.numPages,
+          requestInfo: p === 1 ? requestInfo : undefined,
+          requestInfoShown: false,
+        });
+      }
+    } catch (err) {
+      console.error(`Could not load requested chart for "${song.title}"`, err);
+      newEntries.push({
+        song, pdf: null, pageNum: 1, isFirstPageOfSong: true, isLastPageOfSong: true,
+        loadError: err && err.message ? err.message : 'Could not load this chart.',
+        requestInfo, requestInfoShown: false,
+      });
+    }
+    pageStream.splice(insertAt, 0, ...newEntries);
+    orderedSongs.splice(songInsertAt, 0, song);
+    return newEntries.length;
+  }
+
   // Pulls every request accepted (from this drawer or a prior one) that
   // hasn't been spliced in yet, loads each song's chart, and inserts it
   // right after the page currently on screen — so accepted songs become
-  // the very next swipes, in the order they were accepted.
+  // the very next swipes, in the order they were accepted. Also stamps
+  // where THIS tablet was at the moment of splicing (splice_after_song_id/
+  // splice_after_page_num) — every Follower tablet reads that back to find
+  // the same spot in its own copy of the set and mirror the same insert,
+  // which is what keeps every tablet's song order identical going forward.
   async function spliceAcceptedRequests() {
     const { data, error } = await supabase
       .from('requests')
@@ -992,32 +1064,16 @@
       // revisit (forward or backward).
       const requestInfo = rows.map(r => ({ tipAmount: r.tip_amount, note: r.note }));
 
-      const newEntries = [];
-      try {
-        const pdf = await window.pdfjsLib.getDocument(song.chart_url).promise;
-        for (let p = 1; p <= pdf.numPages; p++) {
-          newEntries.push({
-            song, pdf, pageNum: p, isFirstPageOfSong: p === 1, isLastPageOfSong: p === pdf.numPages,
-            requestInfo: p === 1 ? requestInfo : undefined,
-            requestInfoShown: false,
-          });
-        }
-      } catch (err) {
-        console.error(`Could not load requested chart for "${song.title}"`, err);
-        newEntries.push({
-          song, pdf: null, pageNum: 1, isFirstPageOfSong: true, isLastPageOfSong: true,
-          loadError: err && err.message ? err.message : 'Could not load this chart.',
-          requestInfo, requestInfoShown: false,
-        });
-      }
-
-      pageStream.splice(insertAt, 0, ...newEntries);
-      insertAt += newEntries.length;
-      orderedSongs.splice(songInsertAt, 0, song);
+      const insertedCount = await insertSongAtIndex(song, requestInfo, insertAt, songInsertAt);
+      insertAt += insertedCount;
       songInsertAt += 1;
       addedTitles.push(rows.length > 1 ? `${song.title} (x${rows.length} requests)` : song.title);
 
-      await supabase.from('requests').update({ spliced_at: splicedAt }).in('id', rows.map(r => r.id));
+      await supabase.from('requests').update({
+        spliced_at: splicedAt,
+        splice_after_song_id: currentEntry ? currentEntry.song.id : null,
+        splice_after_page_num: currentEntry ? currentEntry.pageNum : null,
+      }).in('id', rows.map(r => r.id));
     }
 
     if (addedTitles.length === 0) return;
@@ -1041,7 +1097,134 @@
     }
   }
 
-  requestBadge.addEventListener('click', openDrawer);
+  // ---------------- Follower-side band sync ----------------
+  // A Follower never accepts/declines anything itself — it just mirrors
+  // whatever the Master already spliced. See migration-band-sync-v1.sql
+  // for the two new `requests` columns this depends on.
+
+  // Finds the pageStream index whose song+page matches where the Master
+  // was at the moment it spliced. A null songId means the Master was at
+  // the very start of the set (nothing played yet), so there's nothing to
+  // "find" — insert at position 0 instead.
+  function findStreamIndexForReference(songId, pageNum) {
+    if (!songId) return -1;
+    return pageStream.findIndex(e => e.song.id === songId && e.pageNum === pageNum);
+  }
+
+  async function checkForFollowerSplices() {
+    if (!gig || role !== 'follower') return;
+
+    const { data, error } = await supabase
+      .from('requests')
+      .select('id, song_id, spliced_at, splice_after_song_id, splice_after_page_num, tip_amount, note')
+      .eq('gig_session_id', gig.id)
+      .not('spliced_at', 'is', null)
+      .order('spliced_at', { ascending: true });
+
+    if (error || !data) return;
+    const newRows = data.filter(r => !processedSpliceIds.has(r.id));
+    if (newRows.length === 0) return;
+
+    // Group by spliced_at — the Master stamps one shared timestamp per
+    // song (see spliceAcceptedRequests()), so each distinct spliced_at
+    // here is exactly one song to mirror. Preserving arrival order (oldest
+    // spliced_at first) means multiple songs accepted in the same Master
+    // drawer-close still get inserted here in the same order they were
+    // there.
+    const groups = [];
+    const bySplicedAt = new Map();
+    for (const row of newRows) {
+      if (!bySplicedAt.has(row.spliced_at)) {
+        const group = {
+          songId: row.song_id,
+          referenceSongId: row.splice_after_song_id,
+          referencePageNum: row.splice_after_page_num,
+          rows: [],
+        };
+        bySplicedAt.set(row.spliced_at, group);
+        groups.push(group);
+      }
+      bySplicedAt.get(row.spliced_at).rows.push(row);
+    }
+
+    const songMap = await fetchSongsByIds(groups.map(g => g.songId));
+
+    let insertAt, songInsertAt;
+    let synced = false;
+    const wasAtEnd = atEnd;
+
+    for (const group of groups) {
+      group.rows.forEach(r => processedSpliceIds.add(r.id));
+      const song = songMap[group.songId];
+      if (!song) continue; // deleted from the catalog since — nothing to mirror
+
+      // The first group in this batch tells us exactly where the Master
+      // was — jump there so this tablet briefly shows the same page too
+      // ("everyone at the same spot for a minute"), then build later
+      // groups in the same batch on top of that same point.
+      if (!synced) {
+        if (group.referenceSongId) {
+          const refIndex = findStreamIndexForReference(group.referenceSongId, group.referencePageNum);
+          if (refIndex >= 0) {
+            currentIndex = refIndex;
+            insertAt = refIndex + 1;
+            songInsertAt = orderedSongs.findIndex(s => s.id === group.referenceSongId) + 1;
+          } else {
+            // Shouldn't normally happen (every tablet processes the same
+            // splices in the same order) — fall back to the end of the
+            // set rather than silently dropping the new song.
+            console.warn('Could not find this tablet\'s copy of the Master\'s splice point — inserting at the end of the set instead.');
+            insertAt = pageStream.length;
+            songInsertAt = orderedSongs.length;
+            currentIndex = Math.min(currentIndex, pageStream.length - 1);
+          }
+        } else {
+          currentIndex = 0;
+          insertAt = 0;
+          songInsertAt = 0;
+        }
+        synced = true;
+      }
+
+      const requestInfo = group.rows.map(r => ({ tipAmount: r.tip_amount, note: r.note }));
+      const insertedCount = await insertSongAtIndex(song, requestInfo, insertAt, songInsertAt);
+      insertAt += insertedCount;
+      songInsertAt += 1;
+    }
+
+    if (!synced) return;
+
+    gig.runtime_order = orderedSongs.map(s => s.id);
+    songCountEl.textContent = orderedSongs.length;
+    showToast('Synced with the Master — new request added to the set');
+
+    if (wasAtEnd) {
+      atEnd = false;
+      endScreen.classList.add('hidden');
+      topBar.classList.remove('hidden');
+      progressFooter.classList.remove('hidden');
+      canvas.classList.remove('hidden');
+      showChrome();
+    }
+    await renderCurrentPage();
+  }
+
+  // Realtime push so a Follower reacts in about a second, not on the next
+  // 15-second poll (kept only as a safety net for a missed/reconnecting
+  // realtime event) — the whole point is the sync should feel live.
+  function setupFollowerRealtime() {
+    supabase
+      .channel(`requests-sync-${gig.id}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'requests',
+        filter: `gig_session_id=eq.${gig.id}`,
+      }, () => { checkForFollowerSplices(); })
+      .subscribe();
+  }
+
+  requestBadge.addEventListener('click', () => { if (role === 'master') openDrawer(); });
   drawerCloseBtn.addEventListener('click', closeDrawer);
 
   async function goToIndex(newIndex, opts) {
@@ -1050,7 +1233,8 @@
     // Cheap, fire-and-forget: check for new requests on every page turn,
     // since that's the moment the performer is naturally glancing at the
     // screen anyway. No need to await it — it shouldn't hold up navigation.
-    refreshPendingRequests();
+    // Master-only — a Follower has no drawer to check requests for at all.
+    if (role === 'master') refreshPendingRequests();
 
     if (newIndex >= pageStream.length) {
       atEnd = true;

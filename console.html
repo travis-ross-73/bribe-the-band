@@ -389,6 +389,8 @@
       <select id="setlist-picker"></select>
       <button class="primary" id="start-gig-btn">Start New Gig With Selected Setlist</button>
       <button id="start-set-btn" disabled>Start the Set</button>
+      <button class="secondary hidden" id="join-follower-btn" style="width:100%; margin-top:8px;">+ Join as Follower (for another band member's tablet)</button>
+      <div class="section-sub hidden" id="join-follower-hint" style="margin-top:4px; margin-bottom:0;">Open this on a bandmate's tablet, logged in with the same account. It shows the same charts and swipes independently, but won't manage the request queue — that stays on this tablet (the "Master"). When a request gets accepted here, every Follower tablet briefly syncs to the same spot before splicing it in, so everyone's song order stays in sync.</div>
 
       <div id="gig-caps-panel" class="hidden">
         <h3>Nightly Request Cap</h3>
@@ -524,6 +526,8 @@
   const setlistPicker = document.getElementById('setlist-picker');
   const startGigBtn = document.getElementById('start-gig-btn');
   const startSetBtn = document.getElementById('start-set-btn');
+  const joinFollowerBtn = document.getElementById('join-follower-btn');
+  const joinFollowerHint = document.getElementById('join-follower-hint');
   const requestListEl = document.getElementById('request-list');
   const gigCapsPanel = document.getElementById('gig-caps-panel');
   const gigCapInput = document.getElementById('gig-cap-input');
@@ -646,11 +650,16 @@
       const setlist = setlists.find(s => s.id === activeGig.active_setlist_id);
       activeGigStatus.classList.remove('none');
       activeGigStatus.textContent = `Live now — ${setlist ? setlist.name : 'a setlist'} (code ${activeGig.gig_code})`;
-      startSetBtn.disabled = !(activeGig.runtime_order && activeGig.runtime_order.length > 0);
+      const hasSet = !!(activeGig.runtime_order && activeGig.runtime_order.length > 0);
+      startSetBtn.disabled = !hasSet;
+      joinFollowerBtn.classList.toggle('hidden', !hasSet);
+      joinFollowerHint.classList.toggle('hidden', !hasSet);
     } else {
       activeGigStatus.classList.add('none');
       activeGigStatus.textContent = 'No active gig right now.';
       startSetBtn.disabled = true;
+      joinFollowerBtn.classList.add('hidden');
+      joinFollowerHint.classList.add('hidden');
     }
     renderGigCapsPanel();
   }
@@ -720,6 +729,16 @@
   startSetBtn.addEventListener('click', () => {
     if (!activeGig) return;
     window.open('viewer.html', '_blank');
+  });
+
+  // Opens the viewer in Follower mode — same charts, independent swiping,
+  // no request-drawer controls. Meant to be opened on a bandmate's own
+  // tablet (same shared login), not this one — see migration-band-sync-v1.sql
+  // and the "Follower-side band sync" section of viewer.html for how a
+  // Follower stays in sync when this tablet (the Master) accepts a request.
+  joinFollowerBtn.addEventListener('click', () => {
+    if (!activeGig) return;
+    window.open('viewer.html?role=follower', '_blank');
   });
 
   // ---------------- Rendering: setlist builder (search + ordered set) ----------------
