@@ -1,5 +1,6 @@
 {
   "rewrites": [
+    { "source": "/signup", "destination": "/signup.html" },
     { "source": "/:handle", "destination": "/request.html" }
   ]
 }
