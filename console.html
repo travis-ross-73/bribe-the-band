@@ -31,6 +31,13 @@
     border-bottom: 1px solid #2a2e40;
   }
   header h1 { margin: 0; font-size: 1.3rem; }
+  .header-titles { display: flex; flex-direction: column; gap: 2px; }
+  #console-account-name {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--accent);
+    font-weight: 600;
+  }
   #logout-btn {
     background: transparent;
     border: 1px solid #2a2e40;
@@ -379,6 +386,8 @@
   .bulk-csv-status { font-size: 0.82rem; margin: 0 0 6px; min-height: 1.1em; }
   .bulk-csv-status.ok { color: var(--success); }
   .bulk-csv-status.err { color: var(--danger); }
+  .song-count-line { color: var(--muted); font-size: 0.82rem; margin: -8px 0 10px; }
+  .builder-col-count { color: var(--muted); font-weight: 400; font-size: 0.85rem; }
   .file-upload-row { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
   .file-upload-row input[type="file"] { margin-bottom: 0; }
   .or-divider { color: var(--muted); font-size: 0.78rem; text-align: center; margin: 6px 0; }
@@ -532,7 +541,10 @@
 
 <div id="console-view" class="hidden">
   <header>
-    <h1>🎤 Bribe The Band — Console</h1>
+    <div class="header-titles">
+      <h1>🎤 Bribe The Band — Console</h1>
+      <div id="console-account-name"></div>
+    </div>
     <button id="logout-btn">Log Out</button>
   </header>
 
@@ -620,11 +632,11 @@
 
       <div class="builder-columns">
         <div class="builder-col">
-          <div class="builder-col-label">Available Songs</div>
+          <div class="builder-col-label">Available Songs <span class="builder-col-count" id="available-count"></span></div>
           <div class="song-scroll-list" id="available-list"></div>
         </div>
         <div class="builder-col">
-          <div class="builder-col-label">In This Set</div>
+          <div class="builder-col-label">In This Set <span class="builder-col-count" id="selected-count"></span></div>
           <div class="song-scroll-list" id="selected-list"></div>
         </div>
       </div>
@@ -638,6 +650,7 @@
 
     <section>
       <h2>Saved Setlists</h2>
+      <div class="song-count-line" id="setlist-count-line"></div>
       <div id="setlist-list"></div>
     </section>
 
@@ -686,6 +699,7 @@
     <section>
       <h2>Manage Songs</h2>
       <div class="section-sub">Edit song info, replace a chart PDF, or remove a song from your catalog entirely.</div>
+      <div class="song-count-line" id="manage-song-count"></div>
       <input type="text" id="song-manage-search" placeholder="Search your catalog…" />
       <div id="manage-song-list"></div>
     </section>
@@ -749,6 +763,7 @@
 
   const loginView = document.getElementById('login-view');
   const consoleView = document.getElementById('console-view');
+  const consoleAccountNameEl = document.getElementById('console-account-name');
   const loginEmail = document.getElementById('login-email');
   const loginPassword = document.getElementById('login-password');
   const loginBtn = document.getElementById('login-btn');
@@ -782,11 +797,14 @@
   const newSetlistName = document.getElementById('new-setlist-name');
   const songSearch = document.getElementById('song-search');
   const availableListEl = document.getElementById('available-list');
+  const availableCountEl = document.getElementById('available-count');
   const selectedListEl = document.getElementById('selected-list');
+  const selectedCountEl = document.getElementById('selected-count');
   const saveSetlistBtn = document.getElementById('save-setlist-btn');
   const saveAsNewBtn = document.getElementById('save-as-new-btn');
   const clearBuilderBtn = document.getElementById('clear-builder-btn');
   const setlistListEl = document.getElementById('setlist-list');
+  const setlistCountLineEl = document.getElementById('setlist-count-line');
 
   const newSongTitle = document.getElementById('new-song-title');
   const newSongArtist = document.getElementById('new-song-artist');
@@ -811,6 +829,7 @@
 
   const songManageSearch = document.getElementById('song-manage-search');
   const manageSongListEl = document.getElementById('manage-song-list');
+  const manageSongCountEl = document.getElementById('manage-song-count');
 
   const reportingStatusEl = document.getElementById('reporting-status');
   const lifetimeSummaryHeadingEl = document.getElementById('lifetime-summary-heading');
@@ -862,6 +881,12 @@
       return;
     }
     performer = perf;
+    // Shows which account is logged in — most performers only ever have one,
+    // but Travis (and anyone else running a standing test account alongside
+    // their real one) needs an obvious at-a-glance cue since both accounts
+    // otherwise look identical. Uses the band/artist display name, not the
+    // URL handle, since that's what's actually meaningful to a person.
+    consoleAccountNameEl.textContent = performer.display_name || performer.handle;
 
     loginView.classList.add('hidden');
     consoleView.classList.remove('hidden');
@@ -1060,6 +1085,12 @@
       ? available.filter(s => s.title.toLowerCase().includes(q) || s.artist.toLowerCase().includes(q))
       : available;
 
+    // Intentionally shows the total library count (songs.length), not how
+    // many are left after already adding some to this set — Travis's call:
+    // it's meant to read as "how big is my whole library," not shrink as
+    // you build the set (that's what the "In This Set" counter is for).
+    availableCountEl.textContent = `(${songs.length})`;
+
     if (filtered.length === 0) {
       availableListEl.innerHTML = '<div class="empty-note">No matching songs.</div>';
       return;
@@ -1084,6 +1115,7 @@
   }
 
   function renderSelectedList() {
+    selectedCountEl.textContent = `(${builderSongIds.length})`;
     if (builderSongIds.length === 0) {
       selectedListEl.innerHTML = '<div class="empty-note">No songs added yet — add some from the left.</div>';
       return;
@@ -1177,6 +1209,10 @@
 
   // ---------------- Rendering: saved setlists ----------------
   function renderSetlists() {
+    setlistCountLineEl.textContent = setlists.length
+      ? `${setlists.length} setlist${setlists.length === 1 ? '' : 's'} saved`
+      : '';
+
     setlistPicker.innerHTML = setlists.length
       ? setlists.map(s => `<option value="${s.id}">${escapeHtml(s.name)} (${s.song_ids.length} songs)</option>`).join('')
       : '<option value="">No saved setlists yet</option>';
@@ -1775,7 +1811,15 @@
     bulkError.textContent = '';
     bulkUploadBtn.disabled = true;
     const usedSlugsThisBatch = [];
+    // Same-titled-song guard: uniqueSlug() only prevents an id COLLISION (by
+    // appending -2, -3, etc.) — on its own it will happily create a genuine
+    // duplicate song if the same title gets bulk-added twice (e.g. retrying
+    // a batch that partially succeeded earlier). Checking titles separately
+    // catches that case and skips it instead of silently doubling it up.
+    const existingTitles = new Set(songs.map(s => s.title.trim().toLowerCase()));
+    const usedTitlesThisBatch = new Set();
     let successCount = 0;
+    let skippedDuplicateCount = 0;
 
     for (let i = 0; i < bulkQueue.length; i++) {
       const row = bulkQueue[i];
@@ -1783,6 +1827,12 @@
       const artist = row.artist.trim();
       if (!title) {
         setBulkRowStatus(i, 'Skipped — no title', 'err');
+        continue;
+      }
+      const normalizedTitle = title.toLowerCase();
+      if (existingTitles.has(normalizedTitle) || usedTitlesThisBatch.has(normalizedTitle)) {
+        setBulkRowStatus(i, 'Skipped — already in your library', 'err');
+        skippedDuplicateCount++;
         continue;
       }
       const slug = uniqueSlug(performerScopedSlug(title), usedSlugsThisBatch);
@@ -1804,6 +1854,7 @@
         if (error) throw new Error(error.message);
         setBulkRowStatus(i, 'Done', 'ok');
         successCount++;
+        usedTitlesThisBatch.add(normalizedTitle);
       } catch (err) {
         setBulkRowStatus(i, 'Failed: ' + err.message, 'err');
       }
@@ -1811,7 +1862,8 @@
 
     bulkUploadBtn.disabled = false;
     bulkError.style.color = '';
-    bulkError.textContent = `${successCount}/${bulkQueue.length} songs added.`;
+    bulkError.textContent = `${successCount}/${bulkQueue.length} songs added.`
+      + (skippedDuplicateCount > 0 ? ` ${skippedDuplicateCount} skipped as already in your library.` : '');
     await loadSongs();
     renderBuilder();
     renderManageSongs();
@@ -1829,6 +1881,10 @@
     const list = q
       ? songs.filter(s => s.title.toLowerCase().includes(q) || s.artist.toLowerCase().includes(q))
       : songs;
+
+    manageSongCountEl.textContent = q
+      ? `${list.length} of ${songs.length} songs match "${songManageSearch.value.trim()}"`
+      : `${songs.length} song${songs.length === 1 ? '' : 's'} in your library`;
 
     if (list.length === 0) {
       manageSongListEl.innerHTML = '<div class="empty-note">No songs match.</div>';
