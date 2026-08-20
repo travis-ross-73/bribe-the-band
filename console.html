@@ -365,10 +365,18 @@
   }
   table.bulk-table .bulk-status.ok { color: var(--success); }
   table.bulk-table .bulk-status.err { color: var(--danger); }
-  #bulk-file-input { margin-bottom: 10px; }
-  .bulk-csv-label { display: block; font-size: 0.82rem; color: var(--muted); margin-bottom: 4px; }
-  #bulk-csv-input { margin-bottom: 12px; }
-  .bulk-csv-status { font-size: 0.82rem; margin: -6px 0 10px; min-height: 1.1em; }
+  #bulk-file-input { margin-bottom: 16px; }
+  .bulk-field-label { display: block; font-size: 0.82rem; font-weight: 600; color: var(--text); margin-bottom: 5px; }
+  .bulk-optional-tag { font-weight: 400; color: var(--muted); text-transform: none; }
+  .bulk-csv-section {
+    border-top: 1px solid #2a2e40;
+    padding-top: 14px;
+    margin-top: 4px;
+  }
+  #bulk-csv-input { margin-bottom: 6px; }
+  .bulk-csv-template-link { display: inline-block; font-size: 0.82rem; color: var(--accent); text-decoration: none; margin-bottom: 6px; }
+  .bulk-csv-template-link:hover { text-decoration: underline; }
+  .bulk-csv-status { font-size: 0.82rem; margin: 0 0 6px; min-height: 1.1em; }
   .bulk-csv-status.ok { color: var(--success); }
   .bulk-csv-status.err { color: var(--danger); }
   .file-upload-row { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
@@ -655,11 +663,18 @@
 
     <section>
       <h2>Bulk Add from PDFs</h2>
-      <div class="section-sub">Select several chart PDFs at once. We'll guess each song's title and artist from its filename — review and fix anything in the table below, then upload them all in one go. Got a CSV with the title/artist/key already worked out for each file (e.g. from splitting a big multi-song PDF)? Load it below first and it'll fill in the table for you, matched by filename.</div>
-      <label for="bulk-csv-input" class="bulk-csv-label">Optional: import metadata from a CSV (columns: filename, title, artist, key)</label>
-      <input type="file" id="bulk-csv-input" accept=".csv,text/csv" />
-      <div class="bulk-csv-status" id="bulk-csv-status"></div>
+      <div class="section-sub">Select several chart PDFs at once, then review and fix the title, artist, and key for each one in the table below before uploading them all together.</div>
+
+      <label for="bulk-file-input" class="bulk-field-label">Chart PDFs</label>
       <input type="file" id="bulk-file-input" accept="application/pdf" multiple />
+
+      <div class="bulk-csv-section">
+        <div class="section-sub">Already worked out the title/artist/key for each file — say, after splitting one big multi-song PDF into individual charts? Import that as a CSV below and it'll fill in the table for you automatically, matched by filename, instead of typing it all in by hand.</div>
+        <label for="bulk-csv-input" class="bulk-field-label">Metadata CSV <span class="bulk-optional-tag">(optional)</span></label>
+        <input type="file" id="bulk-csv-input" accept=".csv,text/csv" />
+        <a href="#" id="bulk-csv-template-link" class="bulk-csv-template-link">Download a blank CSV template</a>
+        <div class="bulk-csv-status" id="bulk-csv-status"></div>
+      </div>
       <div id="bulk-table-container"></div>
       <div class="button-row hidden" id="bulk-actions-row">
         <button class="primary" id="bulk-upload-btn">Upload All</button>
@@ -784,6 +799,7 @@
 
   const bulkCsvInput = document.getElementById('bulk-csv-input');
   const bulkCsvStatus = document.getElementById('bulk-csv-status');
+  const bulkCsvTemplateLink = document.getElementById('bulk-csv-template-link');
   const bulkFileInput = document.getElementById('bulk-file-input');
   const bulkTableContainer = document.getElementById('bulk-table-container');
   const bulkActionsRow = document.getElementById('bulk-actions-row');
@@ -1445,6 +1461,21 @@
     return `${baseSlug}-${i}`;
   }
 
+  // songs.id is a plain text primary key, GLOBAL across every performer —
+  // not scoped per-performer. A bare title slug ("wonderwall", "zombie")
+  // collides the instant two different performer accounts both add the same
+  // cover song, which is common (this bit Travis's own travis-ross-test
+  // account bulk-adding a classic-rock/pop setlist that overlapped with
+  // songs already in his main travis-ross catalog — every overlapping title
+  // failed with "duplicate key value violates unique constraint
+  // songs_pkey"). Prefixing every generated id with the performer's own
+  // handle keeps ids globally unique without needing a schema migration —
+  // it only changes how NEW rows are generated going forward, existing rows
+  // keep whatever id they already have.
+  function performerScopedSlug(title) {
+    return `${performer.handle}-${slugify(title)}`;
+  }
+
   // ---------------- Wasabi upload (via serverless presigned-URL function) ----------------
   async function getAccessToken() {
     const { data: { session } } = await supabase.auth.getSession();
@@ -1518,7 +1549,7 @@
       return;
     }
 
-    const id = uniqueSlug(slugify(title));
+    const id = uniqueSlug(performerScopedSlug(title));
     addSongBtn.disabled = true;
 
     let chartUrl = pastedUrl;
@@ -1606,6 +1637,21 @@
     }
     return { map, count: Object.keys(map).length };
   }
+
+  bulkCsvTemplateLink.addEventListener('click', (e) => {
+    e.preventDefault();
+    const csvContent = 'filename,title,artist,key\n'
+      + 'example-chart.pdf,Example Song Title,Example Artist,G\n';
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'bribe-the-band-bulk-add-template.csv';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  });
 
   bulkCsvInput.addEventListener('change', async () => {
     const file = bulkCsvInput.files && bulkCsvInput.files[0];
@@ -1739,7 +1785,7 @@
         setBulkRowStatus(i, 'Skipped — no title', 'err');
         continue;
       }
-      const slug = uniqueSlug(slugify(title), usedSlugsThisBatch);
+      const slug = uniqueSlug(performerScopedSlug(title), usedSlugsThisBatch);
       usedSlugsThisBatch.push(slug);
 
       try {
