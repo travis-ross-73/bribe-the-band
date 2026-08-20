@@ -366,6 +366,11 @@
   table.bulk-table .bulk-status.ok { color: var(--success); }
   table.bulk-table .bulk-status.err { color: var(--danger); }
   #bulk-file-input { margin-bottom: 10px; }
+  .bulk-csv-label { display: block; font-size: 0.82rem; color: var(--muted); margin-bottom: 4px; }
+  #bulk-csv-input { margin-bottom: 12px; }
+  .bulk-csv-status { font-size: 0.82rem; margin: -6px 0 10px; min-height: 1.1em; }
+  .bulk-csv-status.ok { color: var(--success); }
+  .bulk-csv-status.err { color: var(--danger); }
   .file-upload-row { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
   .file-upload-row input[type="file"] { margin-bottom: 0; }
   .or-divider { color: var(--muted); font-size: 0.78rem; text-align: center; margin: 6px 0; }
@@ -650,7 +655,10 @@
 
     <section>
       <h2>Bulk Add from PDFs</h2>
-      <div class="section-sub">Select several chart PDFs at once. We'll guess each song's title and artist from its filename — review and fix anything in the table below, then upload them all in one go.</div>
+      <div class="section-sub">Select several chart PDFs at once. We'll guess each song's title and artist from its filename — review and fix anything in the table below, then upload them all in one go. Got a CSV with the title/artist/key already worked out for each file (e.g. from splitting a big multi-song PDF)? Load it below first and it'll fill in the table for you, matched by filename.</div>
+      <label for="bulk-csv-input" class="bulk-csv-label">Optional: import metadata from a CSV (columns: filename, title, artist, key)</label>
+      <input type="file" id="bulk-csv-input" accept=".csv,text/csv" />
+      <div class="bulk-csv-status" id="bulk-csv-status"></div>
       <input type="file" id="bulk-file-input" accept="application/pdf" multiple />
       <div id="bulk-table-container"></div>
       <div class="button-row hidden" id="bulk-actions-row">
@@ -774,6 +782,8 @@
   const addSongBtn = document.getElementById('add-song-btn');
   const addSongError = document.getElementById('add-song-error');
 
+  const bulkCsvInput = document.getElementById('bulk-csv-input');
+  const bulkCsvStatus = document.getElementById('bulk-csv-status');
   const bulkFileInput = document.getElementById('bulk-file-input');
   const bulkTableContainer = document.getElementById('bulk-table-container');
   const bulkActionsRow = document.getElementById('bulk-actions-row');
@@ -1564,6 +1574,83 @@
     return { title: cleaned, artist: '' };
   }
 
+  // Optional metadata CSV (filename, title, artist, key) — the manifest this
+  // console can hand back after splitting a big multi-song PDF into
+  // individual charts. Keyed by filename so it applies regardless of
+  // whether the CSV or the PDFs get loaded first. A minimal hand-rolled CSV
+  // parser is fine here: the manifest is Claude-generated with plain values
+  // (no embedded commas/quotes), so a full RFC 4180 parser is overkill.
+  let bulkCsvMap = {};
+
+  function parseCsv(text) {
+    const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
+    if (lines.length === 0) return { map: {}, count: 0 };
+    const header = lines[0].split(',').map(h => h.trim().toLowerCase());
+    const filenameIdx = header.indexOf('filename');
+    const titleIdx = header.indexOf('title');
+    const artistIdx = header.indexOf('artist');
+    const keyIdx = header.indexOf('key');
+    if (filenameIdx === -1 || titleIdx === -1) {
+      return { map: {}, count: 0, error: 'CSV needs at least "filename" and "title" columns.' };
+    }
+    const map = {};
+    for (const line of lines.slice(1)) {
+      const cols = line.split(',');
+      const filename = (cols[filenameIdx] || '').trim();
+      if (!filename) continue;
+      map[filename] = {
+        title: (cols[titleIdx] || '').trim(),
+        artist: artistIdx !== -1 ? (cols[artistIdx] || '').trim() : '',
+        key: keyIdx !== -1 ? (cols[keyIdx] || '').trim() : '',
+      };
+    }
+    return { map, count: Object.keys(map).length };
+  }
+
+  bulkCsvInput.addEventListener('change', async () => {
+    const file = bulkCsvInput.files && bulkCsvInput.files[0];
+    bulkCsvStatus.textContent = '';
+    bulkCsvStatus.className = 'bulk-csv-status';
+    if (!file) { bulkCsvMap = {}; return; }
+    try {
+      const text = await file.text();
+      const result = parseCsv(text);
+      if (result.error) {
+        bulkCsvStatus.textContent = result.error;
+        bulkCsvStatus.className = 'bulk-csv-status err';
+        bulkCsvMap = {};
+        return;
+      }
+      bulkCsvMap = result.map;
+      bulkCsvStatus.textContent = `Loaded metadata for ${result.count} file${result.count === 1 ? '' : 's'} — select the matching PDFs below (or re-apply to PDFs already selected).`;
+      bulkCsvStatus.className = 'bulk-csv-status ok';
+      // If PDFs are already sitting in the queue (CSV loaded second), apply
+      // the metadata to them right away instead of requiring a re-select.
+      if (bulkQueue.length > 0) {
+        applyCsvMapToQueue();
+        renderBulkTable();
+      }
+    } catch (err) {
+      bulkCsvStatus.textContent = 'Could not read that CSV: ' + err.message;
+      bulkCsvStatus.className = 'bulk-csv-status err';
+      bulkCsvMap = {};
+    }
+  });
+
+  function applyCsvMapToQueue() {
+    let matched = 0;
+    for (const row of bulkQueue) {
+      const meta = bulkCsvMap[row.file.name];
+      if (meta) {
+        matched++;
+        if (meta.title) row.title = meta.title;
+        if (meta.artist) row.artist = meta.artist;
+        if (meta.key) row.key = meta.key;
+      }
+    }
+    return matched;
+  }
+
   bulkFileInput.addEventListener('change', () => {
     const files = Array.from(bulkFileInput.files || []);
     bulkError.textContent = '';
@@ -1571,6 +1658,9 @@
       const guess = parseFilenameGuess(file.name);
       return { file, title: guess.title, artist: guess.artist, key: '', capo: '', status: '', statusClass: '' };
     });
+    if (Object.keys(bulkCsvMap).length > 0) {
+      applyCsvMapToQueue();
+    }
     renderBulkTable();
   });
 
