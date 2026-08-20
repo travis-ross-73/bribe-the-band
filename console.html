@@ -56,6 +56,12 @@
     margin: 0 0 4px;
     font-size: 1.05rem;
   }
+  .section-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+  .section-header-row h2 { margin-bottom: 4px; }
   section .section-sub {
     color: var(--muted);
     font-size: 0.85rem;
@@ -263,6 +269,46 @@
     font-size: 0.78rem;
     padding: 6px 10px;
   }
+  .request-status-badge {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    padding: 3px 8px;
+    border-radius: 100px;
+    white-space: nowrap;
+  }
+  .request-status-badge.pending { background: #3a3520; color: #f2b134; }
+  .request-status-badge.accepted { background: #1c3a2c; color: #4caf7d; }
+  .request-status-badge.declined { background: #2a2e40; color: var(--muted); }
+
+  .request-activity-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #2a2e40;
+  }
+  .request-activity-header .gig-label { font-weight: 700; }
+  .request-activity-header .gig-timestamp { color: var(--muted); font-size: 0.85rem; }
+  .request-activity-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .request-activity-stats .stat-tile {
+    background: #12141c;
+    border: 1px solid #2a2e40;
+    border-radius: 8px;
+    padding: 10px 12px;
+    text-align: center;
+  }
+  .request-activity-stats .stat-value { font-size: 1.3rem; font-weight: 700; }
+  .request-activity-stats .stat-label { color: var(--muted); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.03em; margin-top: 2px; }
 
   #start-set-btn:disabled {
     background: #2a2e40;
@@ -509,6 +555,7 @@
         <select id="setlist-picker"></select>
         <button class="primary" id="start-gig-btn">Start New Gig</button>
       </div>
+      <div class="section-sub hidden" id="no-setlists-hint">No saved setlists yet — <a href="#" id="go-to-setlists-link">build one in the Setlists tab</a>.</div>
 
       <div class="gig-live-actions">
         <button class="primary" id="start-set-btn" disabled>Start the Set</button>
@@ -535,8 +582,13 @@
     </section>
 
     <section>
-      <h2>Incoming Requests</h2>
-      <div class="section-sub">Tip-ranked, highest first, with the song's key and a chart link for quick reference. "Dismiss" just clears it from this queue — accepting a request into tonight's set now happens from the live request drawer in the chart viewer, once "Start the Set" is running.</div>
+      <div class="section-header-row">
+        <h2>Request Activity</h2>
+        <button class="tiny" id="refresh-requests-btn">Refresh</button>
+      </div>
+      <div class="section-sub">A running tally of everything requested tonight — accepting a request into the set happens from the live request drawer in the chart viewer, so this is just for keeping an eye on things. It keeps every request from this gig (pending, accepted, and dismissed) until you start a new gig — nothing here clears on its own. This doesn't update live as things happen on the viewer tablet — hit Refresh to pull the current data.</div>
+      <div id="request-activity-header" class="request-activity-header hidden"></div>
+      <div id="request-activity-stats" class="request-activity-stats hidden"></div>
       <div id="request-list"></div>
     </section>
 
@@ -692,6 +744,11 @@
   const joinFollowerBtn = document.getElementById('join-follower-btn');
   const joinFollowerHint = document.getElementById('join-follower-hint');
   const requestListEl = document.getElementById('request-list');
+  const requestActivityHeader = document.getElementById('request-activity-header');
+  const requestActivityStats = document.getElementById('request-activity-stats');
+  const refreshRequestsBtn = document.getElementById('refresh-requests-btn');
+  const noSetlistsHint = document.getElementById('no-setlists-hint');
+  const goToSetlistsLink = document.getElementById('go-to-setlists-link');
   const gigCapsPanel = document.getElementById('gig-caps-panel');
   const gigCapInput = document.getElementById('gig-cap-input');
   const saveGigCapsBtn = document.getElementById('save-gig-caps-btn');
@@ -1074,11 +1131,30 @@
   }
   clearBuilderBtn.addEventListener('click', clearBuilder);
 
+  goToSetlistsLink.addEventListener('click', (e) => {
+    e.preventDefault();
+    setActiveTab('setlists');
+  });
+
+  // Manual refresh only, deliberately — Travis's call: this tally doesn't
+  // need to auto-poll or subscribe to Realtime, just a button to pull
+  // current data on demand (e.g. after a bandmate accepts something on the
+  // viewer tablet). Re-checks the active gig itself too, in case it ended.
+  refreshRequestsBtn.addEventListener('click', async () => {
+    refreshRequestsBtn.disabled = true;
+    refreshRequestsBtn.textContent = 'Refreshing…';
+    await loadActiveGig();
+    await renderRequests();
+    refreshRequestsBtn.disabled = false;
+    refreshRequestsBtn.textContent = 'Refresh';
+  });
+
   // ---------------- Rendering: saved setlists ----------------
   function renderSetlists() {
     setlistPicker.innerHTML = setlists.length
       ? setlists.map(s => `<option value="${s.id}">${escapeHtml(s.name)} (${s.song_ids.length} songs)</option>`).join('')
-      : '<option value="">No saved setlists yet — build one below</option>';
+      : '<option value="">No saved setlists yet</option>';
+    noSetlistsHint.classList.toggle('hidden', setlists.length > 0);
 
     setlistListEl.innerHTML = setlists.length
       ? setlists.map(s => `
@@ -1202,8 +1278,29 @@
   }
 
   // ---------------- Requests ----------------
+  // Travis's ask (2026-08-20): this used to be an action queue duplicating
+  // what the live viewer's request drawer already does (accept/decline).
+  // Now it's a passive running tally instead — every request from the
+  // active gig (pending, accepted, or declined), so Travis can glance at
+  // the console and see what's happening request-wise without needing to
+  // be at the tablet running the set. It intentionally does NOT clear on
+  // its own — it's scoped to activeGig.id, so it keeps accumulating for as
+  // long as that gig stays active, and only resets once a new gig starts
+  // (a fresh gig_session_id means a fresh, empty tally). "Dismiss" is kept
+  // for pending items only, since a request can still be waved off from
+  // here without ever being acted on in the viewer.
+  //
+  // Manually-added songs (is_manual) are excluded, same as the Reporting
+  // tab — those aren't real crowd requests, so they'd just be noise here.
+  //
+  // Gig start time is shown in whatever timezone the browser itself is
+  // already in (via toLocaleString(), no timezone picker needed) — this is
+  // just a glance-at-a-tablet display, not a report that gets compared
+  // across timezones, so there's no need to ask Travis to configure one.
   async function renderRequests() {
     if (!activeGig) {
+      requestActivityHeader.classList.add('hidden');
+      requestActivityStats.classList.add('hidden');
       requestListEl.innerHTML = '<div class="empty-note">No active gig — start one above to see requests here.</div>';
       return;
     }
@@ -1211,21 +1308,42 @@
       .from('requests')
       .select('id, song_id, tip_amount, note, status, created_at')
       .eq('gig_session_id', activeGig.id)
-      .eq('status', 'pending')
-      .order('tip_amount', { ascending: false })
-      .order('created_at', { ascending: true });
+      .eq('is_manual', false)
+      .order('created_at', { ascending: false });
 
-    if (!requests || requests.length === 0) {
-      requestListEl.innerHTML = '<div class="empty-note">No pending requests right now.</div>';
+    const gigStart = new Date(activeGig.created_at);
+    requestActivityHeader.classList.remove('hidden');
+    requestActivityHeader.innerHTML = `
+      <span class="gig-label">Tonight's gig</span>
+      <span class="gig-timestamp">Started ${gigStart.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}</span>
+    `;
+
+    const list = requests || [];
+    const accepted = list.filter(r => r.status === 'accepted');
+    const pending = list.filter(r => r.status === 'pending');
+    const declined = list.filter(r => r.status === 'declined');
+    const tipsCollected = accepted.reduce((sum, r) => sum + (Number(r.tip_amount) || 0), 0);
+
+    requestActivityStats.classList.remove('hidden');
+    requestActivityStats.innerHTML = `
+      <div class="stat-tile"><div class="stat-value">${list.length}</div><div class="stat-label">Requests</div></div>
+      <div class="stat-tile"><div class="stat-value">${accepted.length}</div><div class="stat-label">Accepted</div></div>
+      <div class="stat-tile"><div class="stat-value">${pending.length}</div><div class="stat-label">Pending</div></div>
+      <div class="stat-tile"><div class="stat-value">$${tipsCollected.toFixed(0)}</div><div class="stat-label">Tips Collected</div></div>
+    `;
+
+    if (list.length === 0) {
+      requestListEl.innerHTML = '<div class="empty-note">No requests yet tonight.</div>';
       return;
     }
 
-    requestListEl.innerHTML = requests.map(r => {
+    requestListEl.innerHTML = list.map(r => {
       const song = songs.find(s => s.id === r.song_id);
       const title = song ? song.title : 'General tip (no song requested)';
       const keyLabel = song ? formatKeyLabel(song) : '';
       const tipCls = r.tip_amount > 0 ? '' : 'zero';
       const tipLabel = r.tip_amount > 0 ? `$${Number(r.tip_amount).toFixed(0)}` : 'No tip';
+      const statusLabel = r.status === 'accepted' ? 'Accepted' : r.status === 'declined' ? 'Dismissed' : 'Pending';
       return `
         <div class="request-row" data-request-id="${r.id}">
           <div class="request-info">
@@ -1234,8 +1352,9 @@
             ${song && song.chart_url ? `<div class="note"><a href="${song.chart_url}" target="_blank" rel="noopener">Open chart</a></div>` : ''}
           </div>
           <div class="request-tip ${tipCls}">${tipLabel}</div>
+          <span class="request-status-badge ${r.status}">${statusLabel}</span>
           <div class="request-actions">
-            <button class="secondary" data-dismiss="${r.id}">Dismiss</button>
+            ${r.status === 'pending' ? `<button class="secondary" data-dismiss="${r.id}">Dismiss</button>` : ''}
           </div>
         </div>
       `;
