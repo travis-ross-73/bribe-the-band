@@ -208,6 +208,7 @@
     font-size: 0.78rem;
     color: var(--muted);
   }
+  #end-gig-btn { margin-left: auto; }
 
   /* Persistent crowd-page link — always visible once logged in, regardless
      of whether a gig is live, so it's there any time the performer wants
@@ -567,6 +568,7 @@
         <span class="gig-status-dot"></span>
         <span id="active-gig-status-text">No active gig right now.</span>
         <span id="active-gig-status-code" class="gig-status-code hidden"></span>
+        <button class="tiny hidden" id="end-gig-btn">End Gig</button>
       </div>
 
       <div class="crowd-link-row">
@@ -773,6 +775,7 @@
   const activeGigStatus = document.getElementById('active-gig-status');
   const activeGigStatusText = document.getElementById('active-gig-status-text');
   const activeGigStatusCode = document.getElementById('active-gig-status-code');
+  const endGigBtn = document.getElementById('end-gig-btn');
   const crowdLinkUrlEl = document.getElementById('crowd-link-url');
   const copyCrowdLinkBtn = document.getElementById('copy-crowd-link-btn');
   const crowdLinkStatus = document.getElementById('crowd-link-status');
@@ -951,6 +954,7 @@
       startSetBtn.disabled = !hasSet;
       joinFollowerBtn.classList.toggle('hidden', !hasSet);
       joinFollowerHint.classList.toggle('hidden', !hasSet);
+      endGigBtn.classList.remove('hidden');
     } else {
       activeGigStatus.classList.add('none');
       activeGigStatusText.textContent = 'No active gig right now.';
@@ -958,6 +962,7 @@
       startSetBtn.disabled = true;
       joinFollowerBtn.classList.add('hidden');
       joinFollowerHint.classList.add('hidden');
+      endGigBtn.classList.add('hidden');
     }
     renderGigCapsPanel();
   }
@@ -1059,6 +1064,28 @@
   joinFollowerBtn.addEventListener('click', () => {
     if (!activeGig) return;
     window.open('viewer.html?role=follower', '_blank');
+  });
+
+  // Explicitly end tonight's gig without starting a new one — until now the
+  // only way to end a gig was to start a different one, which isn't right
+  // if the night's just over. This closes out the crowd page (it'll show
+  // "no active gig") and clears the live-set controls, but keeps every
+  // request from tonight intact for the Reporting tab and Request Activity
+  // history — nothing here deletes anything, it only flips the gig's status.
+  endGigBtn.addEventListener('click', async () => {
+    if (!activeGig) return;
+    if (!confirm('End tonight\'s gig? The crowd page will stop accepting requests for it, and "Start the Set" will no longer reopen it. Tonight\'s requests and tips stay in your Reporting tab either way.')) return;
+
+    const { error } = await supabase
+      .from('gig_sessions')
+      .update({ status: 'ended' })
+      .eq('id', activeGig.id);
+
+    if (error) { alert('Could not end the gig: ' + error.message); return; }
+
+    activeGig = null;
+    renderActiveGigStatus();
+    await renderRequests();
   });
 
   // ---------------- Rendering: setlist builder (search + ordered set) ----------------
@@ -1232,6 +1259,7 @@
               <button class="tiny" data-export-pdf="${s.id}">Export PDF</button>
               <button class="tiny" data-export-zip="${s.id}">Export ZIP</button>
               <button class="tiny" data-export-txt="${s.id}">Export Text</button>
+              <button class="tiny danger" data-delete-setlist="${s.id}">Delete</button>
             </div>
             <div class="setlist-export-note" data-export-status="${s.id}"></div>
           </div>
@@ -1253,6 +1281,33 @@
     setlistListEl.querySelectorAll('[data-export-txt]').forEach(btn => {
       btn.addEventListener('click', () => exportSetlist(btn.getAttribute('data-export-txt'), 'txt'));
     });
+    setlistListEl.querySelectorAll('[data-delete-setlist]').forEach(btn => {
+      btn.addEventListener('click', () => deleteSetlist(btn.getAttribute('data-delete-setlist')));
+    });
+  }
+
+  // Deleting a setlist only removes the saved template — it does NOT touch
+  // any gig that already ran with it (a gig's runtime_order is its own copy
+  // of the song list, made at "Start New Gig" time, so an old gig's history
+  // and Reporting numbers are unaffected). If this setlist is still the
+  // active gig's setlist, the gig keeps running fine; only the display name
+  // shown for "Live now — <name>" would fall back to a generic label the
+  // next time the page loads, since it looks the setlist up by id.
+  async function deleteSetlist(setlistId) {
+    const setlist = setlists.find(s => s.id === setlistId);
+    if (!setlist) return;
+    if (!confirm(`Delete the setlist "${setlist.name}"? This can't be undone. It won't affect any gig that already used it — those keep their own copy of the running order.`)) return;
+
+    const { error } = await supabase.from('setlists').delete().eq('id', setlistId);
+    if (error) {
+      alert('Could not delete this setlist: ' + error.message);
+      return;
+    }
+
+    setlists = setlists.filter(s => s.id !== setlistId);
+    if (editingSetlistId === setlistId) clearBuilder();
+    renderSetlists();
+    renderActiveGigStatus();
   }
 
   // ---------------- Export ----------------
