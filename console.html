@@ -84,6 +84,17 @@
     font-size: 0.95rem;
     margin-bottom: 10px;
   }
+  /* Checkboxes shouldn't inherit the text-field styling above — it was
+     stretching a checkbox into an invisible full-width padded box, which
+     shoved its label text away from it (this is what made the "Hide from
+     request page" checkbox look disconnected from its own label). */
+  input[type="checkbox"] {
+    width: auto;
+    padding: 0;
+    margin: 0;
+    border: none;
+    background: none;
+  }
   button.primary {
     background: var(--accent);
     color: #12141c;
