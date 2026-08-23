@@ -329,6 +329,7 @@
       .from('songs')
       .select('id, title, artist, song_key, key_with_capo, chart_url')
       .eq('performer_id', gigSession.performer_id)
+      .eq('is_hidden', false)
       .order('title');
 
     if (songError) {

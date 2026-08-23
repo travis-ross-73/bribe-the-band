@@ -432,6 +432,25 @@
     margin-bottom: 0;
     text-align: center;
   }
+  .manage-song-row .hide-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+    font-size: 0.82rem;
+    color: var(--muted, #9a9db0);
+    cursor: pointer;
+  }
+  .manage-song-row .hide-toggle input { margin: 0; }
+  .hidden-badge {
+    background: #3a2f12;
+    color: #e0b559;
+    border: 1px solid #5a4a1e;
+    border-radius: 5px;
+    padding: 1px 6px;
+    font-size: 0.72rem;
+    font-weight: 600;
+  }
   .manage-song-row .row-bottom {
     display: flex;
     align-items: center;
@@ -915,7 +934,7 @@
   async function loadSongs() {
     const { data } = await supabase
       .from('songs')
-      .select('id, title, artist, chart_url, song_key, key_with_capo')
+      .select('id, title, artist, chart_url, song_key, key_with_capo, is_hidden')
       .eq('performer_id', performer.id)
       .order('title');
     songs = data || [];
@@ -1423,7 +1442,7 @@
     }
     const { data: requests } = await supabase
       .from('requests')
-      .select('id, song_id, tip_amount, note, status, created_at')
+      .select('id, song_id, song_title, song_artist, song_key, tip_amount, note, status, created_at')
       .eq('gig_session_id', activeGig.id)
       .eq('is_manual', false)
       .order('created_at', { ascending: false });
@@ -1455,9 +1474,14 @@
     }
 
     requestListEl.innerHTML = list.map(r => {
+      // Prefer the live catalog row (has the current chart link + capo
+      // info), but fall back to the snapshot taken at request time —
+      // this is what still shows the right title/key for a song that's
+      // since been deleted from the catalog, instead of the old bug where
+      // a deleted song's real request silently looked like a plain tip.
       const song = songs.find(s => s.id === r.song_id);
-      const title = song ? song.title : 'General tip (no song requested)';
-      const keyLabel = song ? formatKeyLabel(song) : '';
+      const title = song ? song.title : (r.song_title || (r.song_id ? '(deleted song)' : 'General tip (no song requested)'));
+      const keyLabel = song ? formatKeyLabel(song) : (r.song_key || '');
       const tipCls = r.tip_amount > 0 ? '' : 'zero';
       const tipLabel = r.tip_amount > 0 ? `$${Number(r.tip_amount).toFixed(0)}` : 'No tip';
       const statusLabel = r.status === 'accepted' ? 'Accepted' : r.status === 'declined' ? 'Dismissed' : 'Pending';
@@ -1954,6 +1978,10 @@
           <input type="text" data-field="song_key" value="${escapeHtml(s.song_key || '')}" placeholder="Key" />
           <input type="text" data-field="key_with_capo" value="${escapeHtml(s.key_with_capo || '')}" placeholder="Key with capo" />
         </div>
+        <label class="hide-toggle">
+          <input type="checkbox" data-field="is_hidden" ${s.is_hidden ? 'checked' : ''} />
+          Hide from request page${s.is_hidden ? ' <span class="hidden-badge">Hidden</span>' : ''}
+        </label>
         <div class="row-bottom">
           <div class="chart-link"><a href="${chartLinkHref(s.chart_url)}" target="_blank" rel="noopener" data-chart-link>View current PDF</a></div>
           <input type="file" data-replace-pdf accept="application/pdf" />
@@ -1981,6 +2009,7 @@
         const capo = row.querySelector('[data-field="key_with_capo"]').value.trim();
         const fileInput = row.querySelector('[data-replace-pdf]');
         const replacementFile = fileInput.files && fileInput.files[0];
+        const isHidden = row.querySelector('[data-field="is_hidden"]').checked;
 
         if (!title || !artist) {
           setStatus('Title and artist are required.', 'err');
@@ -1991,7 +2020,8 @@
           title,
           artist,
           song_key: songKey || null,
-          key_with_capo: capo || null
+          key_with_capo: capo || null,
+          is_hidden: isHidden
         };
 
         try {
@@ -2021,7 +2051,7 @@
       row.querySelector('[data-delete]').addEventListener('click', async () => {
         const song = songs.find(s => s.id === songId);
         const label = song ? `"${song.title}"` : 'this song';
-        if (!confirm(`Delete ${label}? This removes it from your catalog, deletes its chart PDF from storage, and takes it out of any saved setlists that include it. This can't be undone.`)) {
+        if (!confirm(`Delete ${label}? This removes it from your catalog, deletes its chart PDF from storage, and takes it out of any saved setlists that include it. This can't be undone — but any past requests for it stay exactly as they are in Reporting, with their title/artist/key preserved, even though the song itself will be gone. (If you just want it off the crowd request page without deleting it, use "Hide from request page" instead.)`)) {
           return;
         }
 
@@ -2121,9 +2151,18 @@
     return num % 1 === 0 ? `$${num.toFixed(0)}` : `$${num.toFixed(2)}`;
   }
 
-  function songLabel(songId) {
+  // Prefers the live catalog (so a rename shows up immediately), falls back
+  // to the title/artist snapshotted onto the request row at the moment it
+  // was made (see migration-song-hide-and-delete-v1.sql) — this is what
+  // keeps a deleted song's history readable in Reporting instead of
+  // collapsing to "(unknown song)" the moment it's removed from the
+  // catalog. Only genuinely pre-migration, pre-deletion rows (no snapshot
+  // AND no live song) fall all the way back to unknown.
+  function songLabel(songId, snapshotTitle, snapshotArtist) {
     const s = songs.find(x => x.id === songId);
-    return s ? { title: s.title, artist: s.artist } : { title: songId || '(unknown song)', artist: '' };
+    if (s) return { title: s.title, artist: s.artist };
+    if (snapshotTitle) return { title: snapshotTitle, artist: snapshotArtist || '' };
+    return { title: songId || '(unknown song)', artist: '' };
   }
 
   async function loadReportingData() {
@@ -2146,7 +2185,7 @@
     if (gigIds.length > 0) {
       const { data: reqData, error: reqError } = await supabase
         .from('requests')
-        .select('gig_session_id, song_id, tip_amount, status, is_manual')
+        .select('gig_session_id, song_id, song_title, song_artist, tip_amount, status, is_manual')
         .in('gig_session_id', gigIds)
         .eq('is_manual', false);
       if (reqError) {
@@ -2233,9 +2272,11 @@
 
     const songTotals = {};
     songRequests.forEach(r => {
-      if (!songTotals[r.song_id]) songTotals[r.song_id] = { count: 0, tips: 0 };
-      songTotals[r.song_id].count += 1;
-      songTotals[r.song_id].tips += Number(r.tip_amount || 0);
+      if (!songTotals[r.song_id]) songTotals[r.song_id] = { count: 0, tips: 0, snapTitle: null, snapArtist: null };
+      const entry = songTotals[r.song_id];
+      entry.count += 1;
+      entry.tips += Number(r.tip_amount || 0);
+      if (!entry.snapTitle && r.song_title) { entry.snapTitle = r.song_title; entry.snapArtist = r.song_artist; }
     });
     const topSongs = Object.entries(songTotals)
       .map(([songId, v]) => ({ songId, ...v }))
@@ -2247,7 +2288,7 @@
     } else {
       lifetimeTopSongsEl.innerHTML = `<div class="builder-col-label" style="margin-top:4px;">Most-Requested Songs</div>` +
         topSongs.map(t => {
-          const label = songLabel(t.songId);
+          const label = songLabel(t.songId, t.snapTitle, t.snapArtist);
           return `
             <div class="top-song-row">
               <span>
@@ -2273,9 +2314,11 @@
 
       const bySong = {};
       gigSongRequests.forEach(r => {
-        if (!bySong[r.song_id]) bySong[r.song_id] = { count: 0, tips: 0 };
-        bySong[r.song_id].count += 1;
-        bySong[r.song_id].tips += Number(r.tip_amount || 0);
+        if (!bySong[r.song_id]) bySong[r.song_id] = { count: 0, tips: 0, snapTitle: null, snapArtist: null };
+        const entry = bySong[r.song_id];
+        entry.count += 1;
+        entry.tips += Number(r.tip_amount || 0);
+        if (!entry.snapTitle && r.song_title) { entry.snapTitle = r.song_title; entry.snapArtist = r.song_artist; }
       });
       const songRows = Object.entries(bySong)
         .map(([songId, v]) => ({ songId, ...v }))
@@ -2286,7 +2329,7 @@
       const songRowsHtml = songRows.length === 0
         ? '<div class="empty-note">No song requests this gig.</div>'
         : songRows.map(t => {
-            const label = songLabel(t.songId);
+            const label = songLabel(t.songId, t.snapTitle, t.snapArtist);
             return `
               <div class="song-tally-row">
                 <span>
