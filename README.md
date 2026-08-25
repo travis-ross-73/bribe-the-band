@@ -31,3 +31,4 @@ while testing.
 
 Full data model and decisions are tracked in the "Song Request and Tip App"
 Claude Project, not duplicated here.
+<!-- staging branch tracking verified 2026-08-25T23:34:52Z -->
