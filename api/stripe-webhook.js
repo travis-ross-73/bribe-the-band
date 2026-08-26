@@ -47,14 +47,6 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: `Webhook Error: ${err.message}` });
   }
 
-  if (process.env.STRIPE_WEBHOOK_DEBUG) {
-    return res.status(200).json({
-      received: true,
-      debug_event_type: event.type,
-      debug_metadata: event.data && event.data.object && event.data.object.metadata,
-      debug_env_supabase_url: SUPABASE_URL,
-    });
-  }
 
   if (event.type === 'payment_intent.succeeded') {
     const paymentIntent = event.data.object;
