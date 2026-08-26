@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Bribe The Band</title>
 <link rel="manifest" href="/manifest.json" />
+<script src="https://js.stripe.com/v3/"></script>
 <style>
   :root {
     --bg: #12141c;
@@ -154,6 +155,25 @@
     color: var(--text);
     font-size: 0.95rem;
   }
+  #payment-element-wrap {
+    margin-bottom: 14px;
+    padding: 12px;
+    border-radius: 8px;
+    border: 1px solid #2a2e40;
+    background: #12141c;
+  }
+  #payment-element-loading {
+    color: var(--muted);
+    font-size: 0.85rem;
+    text-align: center;
+    padding: 8px 0;
+  }
+  #payment-error {
+    color: #e5605a;
+    font-size: 0.85rem;
+    margin-top: 8px;
+    min-height: 0;
+  }
   #note-input {
     width: 100%;
     padding: 10px 12px;
@@ -230,6 +250,12 @@
     <input type="number" min="1" step="1" id="custom-tip-input" placeholder="$ amount" />
   </div>
 
+  <div id="payment-element-wrap" class="hidden">
+    <div id="payment-element-loading">Loading payment form…</div>
+    <div id="payment-element"></div>
+    <div id="payment-error"></div>
+  </div>
+
   <input type="text" id="note-input" placeholder='e.g. &quot;For Sarah&quot; or &quot;Happy Birthday to Eric!&quot;' maxlength="120" />
   <div class="note-hint">Add a note (optional) — dedicate it to someone, request an occasion, whatever you'd like.</div>
 
@@ -249,6 +275,8 @@
   // --- Config ---------------------------------------------------------
   const SUPABASE_URL = 'https://orwxehvthwflgoqnbafp.supabase.co';
   const SUPABASE_ANON_KEY = 'sb_publishable_nplKHALsTus5veOFftyK6w_K-UbvLO_';
+  // Publishable key is meant for client-side exposure (unlike the secret key).
+  const STRIPE_PUBLISHABLE_KEY = 'pk_test_51U8oA2DwqHYT3e6IhqsRKD1N9gvkoz3oUrUbIioBHJpzKPJGA7HiXSUhdxGskuxnwpR5BFN3ckbqm6vEaKbZdXYh00sSBqt76z';
   // Performer handle comes from the URL path: bribetheband.live/travis-ross
   // (routed here via vercel.json's rewrite). Falls back to 'travis-ross' if
   // this file is opened directly with no path segment, e.g. while testing.
@@ -262,6 +290,7 @@
   const gigCodeOverride = params.get('gig');
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const stripe = Stripe(STRIPE_PUBLISHABLE_KEY);
 
   // --- State ------------------------------------------------------------
   let songs = [];
@@ -271,6 +300,14 @@
   let isTipOnly = false;
   let cappedSongIds = new Set(); // song ids that have hit their nightly request cap
   const CAP_POLL_MS = 30000;
+
+  // Payment Element state — a fresh PaymentIntent + Element is created
+  // whenever the selected tip amount changes (simplest correct approach;
+  // negligible API cost at this app's real-world scale).
+  let stripeElements = null;
+  let paymentElement = null;
+  let mountedAmount = null;
+  let paymentIntentDebounceTimer = null;
 
   const statusBanner = document.getElementById('status-banner');
   const tipOnlyCard = document.getElementById('tip-only-card');
@@ -283,6 +320,9 @@
   const tipOptions = document.getElementById('tip-options');
   const customTipWrap = document.getElementById('custom-tip-wrap');
   const customTipInput = document.getElementById('custom-tip-input');
+  const paymentElementWrap = document.getElementById('payment-element-wrap');
+  const paymentElementLoading = document.getElementById('payment-element-loading');
+  const paymentErrorEl = document.getElementById('payment-error');
   const noteInput = document.getElementById('note-input');
   const submitBtn = document.getElementById('submit-request');
   const cancelBtn = document.getElementById('cancel-request');
@@ -426,6 +466,93 @@
     [...tipOptions.children].forEach(btn => btn.classList.remove('selected'));
     submitBtn.disabled = true;
     submitBtn.textContent = 'Send Request';
+    teardownPaymentElement();
+  }
+
+  // Tears down any mounted Payment Element / created PaymentIntent so the
+  // next amount change (or panel open) starts clean.
+  function teardownPaymentElement() {
+    if (paymentIntentDebounceTimer) {
+      clearTimeout(paymentIntentDebounceTimer);
+      paymentIntentDebounceTimer = null;
+    }
+    if (paymentElement) {
+      paymentElement.destroy();
+      paymentElement = null;
+    }
+    stripeElements = null;
+    mountedAmount = null;
+    paymentElementWrap.classList.add('hidden');
+    paymentElementLoading.classList.remove('hidden');
+    paymentErrorEl.textContent = '';
+  }
+
+  // Creates a PaymentIntent for `amount` and mounts a Payment Element for
+  // it. Re-verifies the gig session and nightly cap server-side (see
+  // api/create-payment-intent.js) before ever creating a real charge.
+  async function setupPaymentElement(amount) {
+    if (mountedAmount === amount && stripeElements) return;
+    mountedAmount = amount;
+
+    if (paymentElement) {
+      paymentElement.destroy();
+      paymentElement = null;
+    }
+    stripeElements = null;
+
+    paymentElementWrap.classList.remove('hidden');
+    paymentElementLoading.classList.remove('hidden');
+    paymentErrorEl.textContent = '';
+    submitBtn.disabled = true;
+
+    try {
+      const resp = await fetch('/api/create-payment-intent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          gig_session_id: gigSession.id,
+          song_id: selectedSong ? selectedSong.id : null,
+          song_title: selectedSong ? selectedSong.title : null,
+          tip_amount: amount,
+          note: noteInput.value.trim() || null,
+          is_tip_only: isTipOnly,
+        }),
+      });
+      const data = await resp.json();
+      if (!resp.ok || !data.client_secret) {
+        throw new Error(data.error || 'Could not start payment.');
+      }
+
+      stripeElements = stripe.elements({ clientSecret: data.client_secret, appearance: { theme: 'night' } });
+      paymentElement = stripeElements.create('payment');
+      paymentElement.mount('#payment-element');
+      paymentElementLoading.classList.add('hidden');
+      submitBtn.disabled = false;
+    } catch (err) {
+      console.error(err);
+      paymentElementLoading.classList.add('hidden');
+      paymentErrorEl.textContent = err.message || 'Could not load payment form. Please try again.';
+    }
+  }
+
+  // Handles the rare case where Stripe had to redirect off-page for extra
+  // authentication (e.g. a forced 3DS challenge) instead of confirming
+  // inline. Independent of init()'s gig-lookup outcome — someone who just
+  // paid should see their confirmation even if the gig has since ended.
+  async function handleRedirectReturn() {
+    const clientSecret = params.get('payment_intent_client_secret');
+    if (!clientSecret) return;
+
+    const { paymentIntent } = await stripe.retrievePaymentIntent(clientSecret);
+    const cleanUrl = window.location.pathname + (gigCodeOverride ? `?gig=${gigCodeOverride}` : '');
+    history.replaceState(null, '', cleanUrl);
+
+    if (paymentIntent && paymentIntent.status === 'succeeded') {
+      isTipOnly = !!(paymentIntent.metadata && paymentIntent.metadata.is_tip_only === '1');
+      showConfirmation();
+    } else {
+      alert('Payment was not completed — your request was not sent. Please try again.');
+    }
   }
 
   function openRequestPanel(song) {
@@ -456,20 +583,40 @@
       selectedTip = 'custom';
       customTipWrap.classList.remove('hidden');
       customTipInput.focus();
-      submitBtn.disabled = !(parseFloat(customTipInput.value) > 0);
+      const val = parseFloat(customTipInput.value);
+      submitBtn.disabled = !(val > 0);
+      teardownPaymentElement(); // wait for them to (re)type a custom amount
     } else {
       selectedTip = parseFloat(btn.dataset.amount);
       customTipWrap.classList.add('hidden');
-      submitBtn.disabled = false;
+      if (selectedTip > 0) {
+        submitBtn.textContent = `Pay $${selectedTip.toFixed(2)} & Send`;
+        setupPaymentElement(selectedTip);
+      } else {
+        teardownPaymentElement();
+        submitBtn.textContent = 'Send Request';
+        submitBtn.disabled = false;
+      }
     }
   });
 
   customTipInput.addEventListener('input', () => {
-    submitBtn.disabled = !(parseFloat(customTipInput.value) > 0);
+    const val = parseFloat(customTipInput.value);
+    const valid = val > 0;
+    submitBtn.disabled = !valid;
+    submitBtn.textContent = valid ? `Pay $${val.toFixed(2)} & Send` : 'Send Request';
+
+    if (paymentIntentDebounceTimer) clearTimeout(paymentIntentDebounceTimer);
+    if (!(val >= 0.5)) {
+      teardownPaymentElement();
+      return;
+    }
+    paymentIntentDebounceTimer = setTimeout(() => setupPaymentElement(val), 500);
   });
 
   cancelBtn.addEventListener('click', () => {
     panel.classList.remove('open');
+    teardownPaymentElement();
   });
 
   function currentTipAmount() {
@@ -492,27 +639,81 @@
       }
     }
 
-    submitBtn.disabled = true;
-    submitBtn.textContent = 'Sending…';
+    const amount = currentTipAmount();
 
-    const { error } = await supabase.from('requests').insert({
-      gig_session_id: gigSession.id,
-      song_id: selectedSong ? selectedSong.id : null,
-      tip_amount: currentTipAmount(),
-      note: noteInput.value.trim() || null,
-      status: 'pending'
-    });
+    // --- No-tip path: unchanged direct insert, no payment involved. ------
+    if (amount === 0) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Sending…';
 
-    if (error) {
-      console.error(error);
-      submitBtn.textContent = 'Send Request';
-      submitBtn.disabled = false;
-      alert('Something went wrong sending your request. Please try again.');
+      const { error } = await supabase.from('requests').insert({
+        gig_session_id: gigSession.id,
+        song_id: selectedSong ? selectedSong.id : null,
+        tip_amount: 0,
+        note: noteInput.value.trim() || null,
+        status: 'pending'
+      });
+
+      if (error) {
+        console.error(error);
+        submitBtn.textContent = 'Send Request';
+        submitBtn.disabled = false;
+        alert('Something went wrong sending your request. Please try again.');
+        return;
+      }
+
+      panel.classList.remove('open');
+      showConfirmation();
       return;
     }
 
-    panel.classList.remove('open');
-    showConfirmation();
+    // --- Paid path: confirm the mounted Payment Element. -----------------
+    // Flush a pending debounced setup (e.g. they typed a custom amount and
+    // hit Send before the 500ms debounce fired) before confirming.
+    if (paymentIntentDebounceTimer) {
+      clearTimeout(paymentIntentDebounceTimer);
+      paymentIntentDebounceTimer = null;
+      await setupPaymentElement(amount);
+    }
+    if (!stripeElements) {
+      alert('Payment form is still loading — please wait a moment and try again.');
+      return;
+    }
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Processing…';
+    paymentErrorEl.textContent = '';
+
+    const { error: submitError } = await stripeElements.submit();
+    if (submitError) {
+      paymentErrorEl.textContent = submitError.message || 'Please check your payment details.';
+      submitBtn.disabled = false;
+      submitBtn.textContent = `Pay $${amount.toFixed(2)} & Send`;
+      return;
+    }
+
+    const { error: confirmError, paymentIntent } = await stripe.confirmPayment({
+      elements: stripeElements,
+      confirmParams: {
+        return_url: window.location.origin + window.location.pathname + window.location.search,
+      },
+      redirect: 'if_required',
+    });
+
+    if (confirmError) {
+      paymentErrorEl.textContent = confirmError.message || 'Payment failed. Please try again.';
+      submitBtn.disabled = false;
+      submitBtn.textContent = `Pay $${amount.toFixed(2)} & Send`;
+      return;
+    }
+
+    // paymentIntent is only returned here when redirect:'if_required' kept
+    // us on-page (the common case for cards) — a forced 3DS redirect is
+    // handled separately by handleRedirectReturn() on the next page load.
+    if (paymentIntent && paymentIntent.status === 'succeeded') {
+      panel.classList.remove('open');
+      showConfirmation();
+    }
   });
 
   function showConfirmation() {
@@ -542,6 +743,7 @@
     }, 1000);
   }
 
+  handleRedirectReturn();
   init();
 </script>
 

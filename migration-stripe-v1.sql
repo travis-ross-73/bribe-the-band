@@ -1,0 +1,11 @@
+-- Run once in the STAGING Supabase SQL editor (orwxehvthwflgoqnbafp), never
+-- against production — real Stripe payments are staging-only for now.
+--
+-- Backs the webhook's idempotency: Stripe's webhook delivery is at-least-once,
+-- so this unique constraint lets the webhook tell "already processed this
+-- payment" (a Postgres 23505 unique-violation) apart from a real error, and
+-- skip re-inserting a duplicate row on retry. NULL is fine here — Postgres
+-- treats every NULL as distinct for a unique column, so the existing $0
+-- "no tip" rows (which never set this column) never collide with each other
+-- or with a real payment's row.
+alter table requests add column if not exists stripe_payment_intent_id text unique;
