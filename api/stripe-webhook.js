@@ -47,10 +47,18 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: `Webhook Error: ${err.message}` });
   }
 
+  if (process.env.STRIPE_WEBHOOK_DEBUG) {
+    console.error('DEBUG event received', event.type, JSON.stringify(event.data && event.data.object && event.data.object.metadata));
+  }
+
   if (event.type === 'payment_intent.succeeded') {
     const paymentIntent = event.data.object;
     const metadata = paymentIntent.metadata || {};
     const gigSessionId = metadata.gig_session_id;
+
+    if (process.env.STRIPE_WEBHOOK_DEBUG && !gigSessionId) {
+      return res.status(200).json({ received: true, debug: 'no gigSessionId found in metadata', metadata });
+    }
 
     if (gigSessionId) {
       const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -64,6 +72,10 @@ export default async function handler(req, res) {
       });
 
       if (error) {
+        console.error('DEBUG insert error', JSON.stringify(error));
+        if (process.env.STRIPE_WEBHOOK_DEBUG) {
+          return res.status(200).json({ received: true, debug_error: error });
+        }
         if (error.code === '23505') {
           // Unique violation on stripe_payment_intent_id — Stripe's webhook
           // delivery is at-least-once, so a retry of an already-processed
