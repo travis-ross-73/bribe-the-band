@@ -256,6 +256,7 @@
     margin-bottom: 16px;
   }
   .gig-setup-row select, .gig-setup-row button { margin-bottom: 0; }
+  .button-caption { color: var(--muted); font-size: 0.78rem; margin: -2px 0 4px; }
 
   /* Start the Set / Join as Follower, grouped as the live-performance actions */
   .gig-live-actions {
@@ -611,11 +612,13 @@
       <div class="gig-setup-row">
         <select id="setlist-picker"></select>
         <button class="primary" id="start-gig-btn">Start New Gig</button>
+        <div class="button-caption">Makes the crowd page live for tonight — do this once, before the show starts.</div>
       </div>
       <div class="section-sub hidden" id="no-setlists-hint">No saved setlists yet — <a href="#" id="go-to-setlists-link">build one in the Setlists tab</a>.</div>
 
       <div class="gig-live-actions">
-        <button class="primary" id="start-set-btn" disabled>Start the Set</button>
+        <button class="primary" id="start-set-btn" disabled>Start the Set (Open PDF Charts)</button>
+        <div class="button-caption">Opens the chart viewer — the screen you actually swipe through and perform from.</div>
         <button class="secondary hidden" id="join-follower-btn">+ Join as Follower (for another band member's tablet)</button>
         <div class="section-sub hidden" id="join-follower-hint">Open this on a bandmate's tablet, logged in with the same account. It shows the same charts and swipes independently, but won't manage the request queue — that stays on this tablet (the "Master"). When a request gets accepted here, every Follower tablet briefly syncs to the same spot before splicing it in, so everyone's song order stays in sync.</div>
       </div>
