@@ -57,15 +57,22 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'This gig is no longer active.' });
     }
 
-    // Server-side cap re-check, right before creating a charge — reuses the
-    // exact same RPC the crowd page itself calls, so there's no separate
-    // cap logic to drift out of sync. Never let someone pay for a request
-    // that's guaranteed to be rejected as over-cap.
+    // Server-side cap/cooldown re-check, right before creating a charge —
+    // reuses the exact same RPC the crowd page itself calls, so there's no
+    // separate logic to drift out of sync. Never let someone pay for a
+    // request that's guaranteed to be rejected as over-cap or on cooldown.
+    // A song already in the active queue is never is_capped (boosting an
+    // existing request bypasses the cap by design — see
+    // migration-queue-cooldown-v1.sql), so this never blocks a real boost.
     if (song_id) {
       const { data: capRows, error: capError } = await supabase.rpc('get_song_request_status', {
         p_gig_session_id: gig_session_id,
       });
-      if (!capError && (capRows || []).some((r) => r.song_id === song_id && r.is_capped)) {
+      const songStatus = !capError && (capRows || []).find((r) => r.song_id === song_id);
+      if (songStatus && songStatus.in_cooldown) {
+        return res.status(409).json({ error: 'This song was just played — it\'s on cooldown for a bit.' });
+      }
+      if (songStatus && songStatus.is_capped) {
         return res.status(409).json({ error: 'This song has already been requested plenty tonight.' });
       }
     }

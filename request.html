@@ -111,6 +111,77 @@
   .song-artist { color: var(--muted); font-size: 0.85rem; margin-top: 2px; }
   .req-arrow { color: var(--accent); font-size: 1.3rem; font-weight: 700; }
   .capped-note { color: var(--accent); font-size: 0.78rem; margin-top: 3px; font-weight: 600; }
+  .cooldown-note { color: var(--muted); font-size: 0.78rem; margin-top: 3px; font-weight: 600; }
+  .queue-badge {
+    background: var(--accent);
+    color: #12141c;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-weight: 700;
+    font-size: 0.82rem;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .song-row.in-queue { border-color: var(--accent); }
+  .tip-total { color: var(--accent); font-weight: 700; font-size: 0.82rem; margin-top: 3px; }
+
+  .section-heading {
+    margin: 22px 0 8px;
+    font-size: 0.95rem;
+    color: var(--text);
+  }
+  #queue-section { margin-bottom: 18px; }
+  #queue-list { display: flex; flex-direction: column; gap: 8px; }
+  .queue-row {
+    background: var(--card);
+    border: 1px solid var(--accent-dark);
+    border-radius: 10px;
+    padding: 12px 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+  }
+  .queue-row .song-title { font-size: 0.95rem; }
+  .queue-row .tip-total { color: var(--accent); font-weight: 700; font-size: 0.9rem; margin-top: 2px; }
+  .queue-empty {
+    color: var(--muted);
+    font-size: 0.88rem;
+    text-align: center;
+    padding: 16px;
+    border: 1px dashed #2a2e40;
+    border-radius: 10px;
+  }
+
+  #cooldown-section { margin-bottom: 18px; }
+  .cooldown-toggle {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--card);
+    border: 1px solid #2a2e40;
+    border-radius: 10px;
+    padding: 12px 14px;
+    color: var(--text);
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .cooldown-list { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+  .cooldown-row {
+    background: var(--card);
+    border: 1px solid #2a2e40;
+    border-radius: 10px;
+    padding: 12px 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    opacity: 0.8;
+  }
+  .cooldown-row .timer { color: var(--muted); font-size: 0.85rem; font-weight: 600; white-space: nowrap; }
 
   #request-panel {
     position: fixed;
@@ -230,6 +301,20 @@
     <button id="tip-only-btn">Leave a Tip</button>
   </div>
 
+  <div id="queue-section">
+    <h2 class="section-heading">🔥 Requested Songs In Queue</h2>
+    <div id="queue-list"></div>
+    <div id="queue-empty" class="queue-empty hidden">Nothing's been requested yet — request a song below!</div>
+  </div>
+
+  <div id="cooldown-section" class="hidden">
+    <button id="cooldown-toggle" class="cooldown-toggle" type="button">
+      <span id="cooldown-toggle-label">Recently Played</span>
+      <span id="cooldown-toggle-arrow">▾</span>
+    </button>
+    <div id="cooldown-list" class="cooldown-list hidden"></div>
+  </div>
+
   <input type="text" id="search" placeholder="Search songs or artists…" />
   <div class="song-list" id="song-list"></div>
 </main>
@@ -298,8 +383,13 @@
   let selectedSong = null; // null when this is a tip-only request
   let selectedTip = null;  // number, or 'custom'
   let isTipOnly = false;
-  let cappedSongIds = new Set(); // song ids that have hit their nightly request cap
-  const CAP_POLL_MS = 30000;
+  let cappedSongIds = new Set(); // song ids blocked from a brand-new request (over cap, or on cooldown)
+  let queueBySong = new Map();   // song_id -> running tip total, for every song still active (pending or accepted-but-not-yet-played)
+  let cooldownBySong = new Map(); // song_id -> seconds remaining until re-requestable
+  // 8s, not 30s — this page is meant to feel "alive" now that it shows a
+  // live queue and boost totals, and it's a single lightweight aggregate
+  // query either way (see get_song_request_status in migration-queue-cooldown-v1.sql).
+  const CAP_POLL_MS = 8000;
 
   // Payment Element state — a fresh PaymentIntent + Element is created
   // whenever the selected tip amount changes (simplest correct approach;
@@ -313,6 +403,13 @@
   const tipOnlyCard = document.getElementById('tip-only-card');
   const tipOnlyBtn = document.getElementById('tip-only-btn');
   const songListEl = document.getElementById('song-list');
+  const queueListEl = document.getElementById('queue-list');
+  const queueEmptyEl = document.getElementById('queue-empty');
+  const cooldownSection = document.getElementById('cooldown-section');
+  const cooldownToggle = document.getElementById('cooldown-toggle');
+  const cooldownToggleLabel = document.getElementById('cooldown-toggle-label');
+  const cooldownToggleArrow = document.getElementById('cooldown-toggle-arrow');
+  const cooldownListEl = document.getElementById('cooldown-list');
   const searchEl = document.getElementById('search');
   const panel = document.getElementById('request-panel');
   const panelTitle = document.getElementById('panel-song-title');
@@ -380,14 +477,15 @@
 
     songs = songData;
     statusBanner.classList.add('hidden');
-    await refreshCapStatus();
-    renderSongs(songs);
+    await refreshCapStatus(); // renders the song list, queue strip, and cooldown section
     setInterval(refreshCapStatus, CAP_POLL_MS);
   }
 
   // Asks the DB (via a SECURITY DEFINER function, since anon users can't
   // read raw `requests` rows) which songs have already hit the nightly
-  // request cap the performer set in the console. Blank/no cap = never capped.
+  // request cap, which are currently in the active queue (with a running
+  // tip total, for boosting), and which are on cooldown after being played.
+  // Blank/no cap or cooldown set in the console = never capped/cooling down.
   async function refreshCapStatus() {
     if (!gigSession) return;
     const { data, error } = await supabase.rpc('get_song_request_status', {
@@ -398,26 +496,118 @@
       return;
     }
     const nextCapped = new Set();
+    const nextQueue = new Map();
+    const nextCooldown = new Map();
     (data || []).forEach(row => {
-      if (row.is_capped) nextCapped.add(row.song_id);
+      if (row.is_capped || row.in_cooldown) nextCapped.add(row.song_id);
+      if (row.in_queue) nextQueue.set(row.song_id, Number(row.queue_tip_total) || 0);
+      if (row.in_cooldown) nextCooldown.set(row.song_id, Math.max(0, row.cooldown_seconds_remaining || 0));
     });
-    const changed = nextCapped.size !== cappedSongIds.size ||
-      [...nextCapped].some(id => !cappedSongIds.has(id));
     cappedSongIds = nextCapped;
-    if (changed) {
-      // Re-render with whatever filter the user currently has typed.
-      const q = searchEl.value.trim().toLowerCase();
-      const filtered = q
-        ? songs.filter(s => s.title.toLowerCase().includes(q) || s.artist.toLowerCase().includes(q))
-        : songs;
-      renderSongs(filtered);
-      // If the panel is open for a song that just got capped out from under
-      // the user, close it rather than let them submit into a dead end.
-      if (selectedSong && cappedSongIds.has(selectedSong.id) && panel.classList.contains('open')) {
-        panel.classList.remove('open');
-      }
+    queueBySong = nextQueue;
+    cooldownBySong = nextCooldown;
+
+    // Always re-render — every poll can move queue totals/countdowns even
+    // when nothing crossed a boolean threshold.
+    const q = searchEl.value.trim().toLowerCase();
+    const filtered = q
+      ? songs.filter(s => s.title.toLowerCase().includes(q) || s.artist.toLowerCase().includes(q))
+      : songs;
+    renderSongs(filtered);
+    renderQueue();
+    renderCooldown();
+
+    // If the panel is open for a song that just got capped/cooled-down out
+    // from under the user, close it rather than let them submit into a dead end.
+    if (selectedSong && cappedSongIds.has(selectedSong.id) && panel.classList.contains('open')) {
+      panel.classList.remove('open');
     }
   }
+
+  function formatTip(amount) {
+    const n = Number(amount);
+    if (!n || n <= 0) return '';
+    return '$' + (Number.isInteger(n) ? n : n.toFixed(2));
+  }
+
+  function formatCountdown(seconds) {
+    const s = Math.max(0, Math.floor(seconds));
+    const m = Math.floor(s / 60);
+    const rem = s % 60;
+    return `${m}:${rem.toString().padStart(2, '0')}`;
+  }
+
+  function songById(id) {
+    return songs.find(s => s.id === id) || null;
+  }
+
+  function renderQueue() {
+    const entries = [...queueBySong.entries()]
+      .map(([songId, tipTotal]) => ({ song: songById(songId), tipTotal }))
+      .filter(e => e.song)
+      .sort((a, b) => b.tipTotal - a.tipTotal);
+
+    if (entries.length === 0) {
+      queueListEl.innerHTML = '';
+      queueEmptyEl.classList.remove('hidden');
+      return;
+    }
+    queueEmptyEl.classList.add('hidden');
+    queueListEl.innerHTML = entries.map(({ song, tipTotal }) => `
+      <div class="queue-row" data-boost="${song.id}">
+        <div>
+          <div class="song-title">${escapeHtml(song.title)}</div>
+          <div class="tip-total">${formatTip(tipTotal) || '$0'} tipped so far</div>
+        </div>
+        <button class="queue-badge" data-boost-btn="${song.id}">⬆️ Boost</button>
+      </div>
+    `).join('');
+    queueListEl.querySelectorAll('[data-boost-btn]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const song = songById(btn.dataset.boostBtn);
+        if (song && !cooldownBySong.has(song.id)) openRequestPanel(song);
+      });
+    });
+  }
+
+  function renderCooldown() {
+    const entries = [...cooldownBySong.entries()]
+      .map(([songId, secondsRemaining]) => ({ song: songById(songId), secondsRemaining }))
+      .filter(e => e.song)
+      .sort((a, b) => a.secondsRemaining - b.secondsRemaining);
+
+    if (entries.length === 0) {
+      cooldownSection.classList.add('hidden');
+      return;
+    }
+    cooldownSection.classList.remove('hidden');
+    cooldownToggleLabel.textContent = `Recently Played (${entries.length})`;
+    cooldownListEl.innerHTML = entries.map(({ song, secondsRemaining }) => `
+      <div class="cooldown-row" data-song-id="${song.id}">
+        <div class="song-title">${escapeHtml(song.title)}</div>
+        <div class="timer" data-cooldown-timer="${song.id}">Request it again in ${formatCountdown(secondsRemaining)}</div>
+      </div>
+    `).join('');
+  }
+
+  cooldownToggle.addEventListener('click', () => {
+    const isHidden = cooldownListEl.classList.toggle('hidden');
+    cooldownToggleArrow.textContent = isHidden ? '▾' : '▴';
+  });
+
+  // Ticks every cooldown down locally each second so the countdown feels
+  // live without hitting the DB every second — the next 8s poll corrects
+  // any drift (or removes the row entirely once the cooldown really ends).
+  setInterval(() => {
+    if (cooldownBySong.size === 0) return;
+    cooldownBySong.forEach((secondsRemaining, songId) => {
+      cooldownBySong.set(songId, Math.max(0, secondsRemaining - 1));
+    });
+    cooldownListEl.querySelectorAll('[data-cooldown-timer]').forEach(el => {
+      const remaining = cooldownBySong.get(el.dataset.cooldownTimer) || 0;
+      el.textContent = `Request it again in ${formatCountdown(remaining)}`;
+    });
+  }, 1000);
 
   function renderSongs(list) {
     songListEl.innerHTML = '';
@@ -427,17 +617,43 @@
     }
     for (const song of list) {
       const row = document.createElement('div');
-      const capped = cappedSongIds.has(song.id);
-      row.className = capped ? 'song-row capped' : 'song-row';
+      const inCooldown = cooldownBySong.has(song.id);
+      const inQueue = queueBySong.has(song.id) && !inCooldown;
+      // is_capped from the RPC is never true for an in-queue song (see
+      // migration-queue-cooldown-v1.sql) — cappedSongIds also covers
+      // in_cooldown songs, so this is "blocked from a fresh request".
+      const blocked = cappedSongIds.has(song.id);
+
+      let className = 'song-row';
+      let noteHtml = '';
+      let arrowHtml = '<div class="req-arrow">+</div>';
+
+      if (inCooldown) {
+        className += ' capped';
+        const secondsRemaining = cooldownBySong.get(song.id);
+        noteHtml = `<div class="cooldown-note" data-cooldown-timer="${song.id}">Request it again in ${formatCountdown(secondsRemaining)}</div>`;
+        arrowHtml = '<div class="req-arrow"></div>';
+      } else if (blocked) {
+        className += ' capped';
+        noteHtml = '<div class="capped-note">Already requested plenty tonight — try another! 🎶</div>';
+        arrowHtml = '<div class="req-arrow"></div>';
+      } else if (inQueue) {
+        className += ' in-queue';
+        const tipTotal = queueBySong.get(song.id);
+        noteHtml = `<div class="tip-total">${formatTip(tipTotal) || '$0'} tipped so far — add more to boost it!</div>`;
+        arrowHtml = '<button class="queue-badge">⬆️ Boost</button>';
+      }
+
+      row.className = className;
       row.innerHTML = `
         <div>
           <div class="song-title">${escapeHtml(song.title)}</div>
           <div class="song-artist">${escapeHtml(song.artist)}</div>
-          ${capped ? '<div class="capped-note">Already requested plenty tonight — try another! 🎶</div>' : ''}
+          ${noteHtml}
         </div>
-        <div class="req-arrow">${capped ? '' : '+'}</div>
+        ${arrowHtml}
       `;
-      if (!capped) {
+      if (!inCooldown && !blocked) {
         row.addEventListener('click', () => openRequestPanel(song));
       }
       songListEl.appendChild(row);
@@ -559,7 +775,9 @@
     selectedSong = song;
     isTipOnly = false;
     panelTitle.textContent = song.title;
-    panelArtist.textContent = song.artist;
+    panelArtist.textContent = queueBySong.has(song.id)
+      ? `${song.artist} — already in the queue, add a tip to boost it!`
+      : song.artist;
     resetPanelState();
     panel.classList.add('open');
   }
@@ -628,10 +846,16 @@
     if (selectedTip === null || !gigSession) return;
     if (selectedTip === 'custom' && !(parseFloat(customTipInput.value) > 0)) return;
 
-    // Last-second safety check: the song could have hit its cap in the
-    // moments between opening this panel and hitting Send.
+    // Last-second safety check: the song could have hit its cap, or gone on
+    // cooldown from just being played, in the moments between opening this
+    // panel and hitting Send.
     if (selectedSong) {
       await refreshCapStatus();
+      if (cooldownBySong.has(selectedSong.id)) {
+        panel.classList.remove('open');
+        alert(`Looks like "${selectedSong.title}" was just played — it's on cooldown, try again in a bit!`);
+        return;
+      }
       if (cappedSongIds.has(selectedSong.id)) {
         panel.classList.remove('open');
         alert(`Looks like "${selectedSong.title}" has already been requested plenty tonight — try another song!`);

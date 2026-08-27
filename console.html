@@ -630,8 +630,15 @@
           </div>
           <input type="number" min="1" step="1" id="gig-cap-input" placeholder="No limit" />
         </div>
+        <div class="gig-cap-row">
+          <div>
+            <div class="gig-cap-title">Cooldown after playing (minutes)</div>
+            <div class="gig-cap-artist">Once you tap "Got it — play the song," the crowd can't re-request or boost it again until this many minutes pass. Leave blank for no cooldown.</div>
+          </div>
+          <input type="number" min="1" step="1" id="gig-cooldown-input" placeholder="No cooldown" />
+        </div>
         <div class="button-row">
-          <button class="secondary" id="save-gig-caps-btn">Save Cap for Tonight</button>
+          <button class="secondary" id="save-gig-caps-btn">Save for Tonight</button>
           <button class="secondary" id="reset-gig-caps-btn">Reset Request Counts</button>
         </div>
         <div class="manage-song-status" id="gig-caps-status"></div>
@@ -822,6 +829,7 @@
   const goToSetlistsLink = document.getElementById('go-to-setlists-link');
   const gigCapsPanel = document.getElementById('gig-caps-panel');
   const gigCapInput = document.getElementById('gig-cap-input');
+  const gigCooldownInput = document.getElementById('gig-cooldown-input');
   const saveGigCapsBtn = document.getElementById('save-gig-caps-btn');
   const resetGigCapsBtn = document.getElementById('reset-gig-caps-btn');
   const gigCapsStatus = document.getElementById('gig-caps-status');
@@ -963,7 +971,7 @@
   async function loadActiveGig() {
     const { data } = await supabase
       .from('gig_sessions')
-      .select('id, gig_code, active_setlist_id, runtime_order, request_cap, cap_reset_at, status, created_at')
+      .select('id, gig_code, active_setlist_id, runtime_order, request_cap, cap_reset_at, cooldown_minutes, status, created_at')
       .eq('performer_id', performer.id)
       .eq('status', 'active')
       .order('created_at', { ascending: false })
@@ -1035,18 +1043,21 @@
     gigCapsPanel.classList.remove('hidden');
     gigCapsStatus.textContent = '';
     gigCapInput.value = activeGig.request_cap ?? '';
+    gigCooldownInput.value = activeGig.cooldown_minutes ?? '';
   }
 
   saveGigCapsBtn.addEventListener('click', async () => {
     if (!activeGig) return;
-    const raw = gigCapInput.value.trim();
-    const newCap = raw ? parseInt(raw, 10) : null;
+    const rawCap = gigCapInput.value.trim();
+    const newCap = rawCap ? parseInt(rawCap, 10) : null;
+    const rawCooldown = gigCooldownInput.value.trim();
+    const newCooldown = rawCooldown ? parseInt(rawCooldown, 10) : null;
 
     gigCapsStatus.textContent = 'Saving…';
     gigCapsStatus.className = 'manage-song-status';
     const { error } = await supabase
       .from('gig_sessions')
-      .update({ request_cap: newCap })
+      .update({ request_cap: newCap, cooldown_minutes: newCooldown })
       .eq('id', activeGig.id);
 
     if (error) {
@@ -1055,6 +1066,7 @@
       return;
     }
     activeGig.request_cap = newCap;
+    activeGig.cooldown_minutes = newCooldown;
     gigCapsStatus.textContent = 'Saved for tonight.';
     gigCapsStatus.className = 'manage-song-status ok';
   });
@@ -2109,19 +2121,20 @@
     const setlistId = setlistPicker.value;
     if (!setlistId) { alert('Pick (or save) a setlist first.'); return; }
 
-    // Carry forward the most recent gig's request cap, so it doesn't need
-    // re-entering every single night — Travis can still tweak it for
-    // tonight in the caps panel once it loads. A new gig always starts
-    // with a fresh (uncapped-by-reset) count, since requests are scoped to
-    // this brand-new gig_session_id.
+    // Carry forward the most recent gig's request cap and cooldown, so
+    // neither needs re-entering every single night — Travis can still
+    // tweak them for tonight in the caps panel once it loads. A new gig
+    // always starts with a fresh (uncapped-by-reset) count, since requests
+    // are scoped to this brand-new gig_session_id.
     const { data: lastGig } = await supabase
       .from('gig_sessions')
-      .select('request_cap')
+      .select('request_cap, cooldown_minutes')
       .eq('performer_id', performer.id)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
     const carriedCap = (lastGig && lastGig.request_cap) ?? null;
+    const carriedCooldown = (lastGig && lastGig.cooldown_minutes) ?? null;
 
     // End any currently active gig for this performer
     await supabase
@@ -2139,6 +2152,7 @@
       active_setlist_id: setlistId,
       runtime_order: setlist ? setlist.song_ids : [],
       request_cap: carriedCap,
+      cooldown_minutes: carriedCooldown,
       status: 'active'
     });
     if (error) { alert('Could not start gig: ' + error.message); return; }
