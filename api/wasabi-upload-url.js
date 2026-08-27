@@ -50,7 +50,12 @@ export default async function handler(req, res) {
     const token = authHeader.replace(/^Bearer\s+/i, '');
     if (!token) return res.status(401).json({ error: 'Missing auth token.' });
 
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    // Attach the caller's own token so subsequent queries run as
+    // `authenticated` (with their RLS/column grants), not `anon` — matching
+    // auth.getUser(token) alone does NOT do this for a client's later calls.
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: { headers: { Authorization: `Bearer ${token}` } },
+    });
 
     // Validate the token and find the performer it belongs to. We look the
     // performer up ourselves (rather than trusting anything from the
