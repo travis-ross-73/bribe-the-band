@@ -289,7 +289,7 @@
 <body>
 
 <header>
-  <h1>🎤 Bribe The Band</h1>
+  <h1 id="page-title">🎤 Bribe The Band</h1>
   <p>Pick a song, add a tip, make it happen.</p>
 </header>
 
@@ -399,6 +399,7 @@
   let mountedAmount = null;
   let paymentIntentDebounceTimer = null;
 
+  const pageTitleEl = document.getElementById('page-title');
   const statusBanner = document.getElementById('status-banner');
   const tipOnlyCard = document.getElementById('tip-only-card');
   const tipOnlyBtn = document.getElementById('tip-only-btn');
@@ -432,7 +433,7 @@
   async function init() {
     let gigQuery = supabase
       .from('gig_sessions')
-      .select('id, gig_code, status, performer_id')
+      .select('id, gig_code, status, performer_id, display_name_override')
       .eq('status', 'active');
 
     if (gigCodeOverride) {
@@ -461,6 +462,19 @@
       return;
     }
     gigSession = gigData;
+
+    // Header shows tonight's display-name override if the performer set one
+    // in the console, otherwise their account name — falls back to the
+    // generic app name only if somehow neither is set.
+    const { data: performerNameData } = await supabase
+      .from('performers')
+      .select('display_name')
+      .eq('id', gigSession.performer_id)
+      .maybeSingle();
+    const headerName = (gigSession.display_name_override && gigSession.display_name_override.trim())
+      || (performerNameData && performerNameData.display_name)
+      || 'Bribe The Band';
+    pageTitleEl.textContent = `🎤 ${headerName}`;
 
     const { data: songData, error: songError } = await supabase
       .from('songs')
