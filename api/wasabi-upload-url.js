@@ -15,8 +15,8 @@ import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { createClient } from '@supabase/supabase-js';
 
-const SUPABASE_URL = 'https://ykvpjeiakvgihpxektcf.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_g4w52upNnalAllmn8_8vRA_G6Hj-tlM';
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://ykvpjeiakvgihpxektcf.supabase.co';
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'sb_publishable_g4w52upNnalAllmn8_8vRA_G6Hj-tlM';
 
 const WASABI_BUCKET = process.env.WASABI_BUCKET || 'songchart';
 const WASABI_REGION = process.env.WASABI_REGION || 'us-east-1';
