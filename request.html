@@ -297,8 +297,8 @@
   <div id="status-banner">Loading songs…</div>
 
   <div id="tip-only-card">
-    <p>Like what you've heard so far? Leave a tip without a request!</p>
-    <button id="tip-only-btn">Leave a Tip</button>
+    <p id="tip-only-text">Like what you've heard so far? Leave a tip!</p>
+    <button id="tip-only-btn">Support Local Music</button>
   </div>
 
   <div id="queue-section">
@@ -315,6 +315,7 @@
     <div id="cooldown-list" class="cooldown-list hidden"></div>
   </div>
 
+  <h2 class="section-heading" id="song-list-heading">Here's a list of curated songs selected for you to request.</h2>
   <input type="text" id="search" placeholder="Search songs or artists…" />
   <div class="song-list" id="song-list"></div>
 </main>
@@ -399,10 +400,11 @@
   let mountedAmount = null;
   let paymentIntentDebounceTimer = null;
 
-  const pageTitleEl = document.getElementById('page-title');
   const statusBanner = document.getElementById('status-banner');
   const tipOnlyCard = document.getElementById('tip-only-card');
+  const tipOnlyText = document.getElementById('tip-only-text');
   const tipOnlyBtn = document.getElementById('tip-only-btn');
+  const songListHeading = document.getElementById('song-list-heading');
   const songListEl = document.getElementById('song-list');
   const queueListEl = document.getElementById('queue-list');
   const queueEmptyEl = document.getElementById('queue-empty');
@@ -463,18 +465,21 @@
     }
     gigSession = gigData;
 
-    // Header shows tonight's display-name override if the performer set one
-    // in the console, otherwise their account name — falls back to the
-    // generic app name only if somehow neither is set.
+    // The page keeps its "Bribe The Band" branding in the header — the
+    // performer's name (tonight's display-name override if the performer
+    // set one in the console, otherwise their account name) shows instead
+    // in the tip prompt and the song-list heading, where it's actually
+    // meaningful to the crowd.
     const { data: performerNameData } = await supabase
       .from('performers')
       .select('display_name')
       .eq('id', gigSession.performer_id)
       .maybeSingle();
-    const headerName = (gigSession.display_name_override && gigSession.display_name_override.trim())
+    const performerName = (gigSession.display_name_override && gigSession.display_name_override.trim())
       || (performerNameData && performerNameData.display_name)
-      || 'Bribe The Band';
-    pageTitleEl.textContent = `🎤 ${headerName}`;
+      || 'the band';
+    tipOnlyText.textContent = `Like what you've heard from ${performerName} so far? Leave a tip!`;
+    songListHeading.textContent = `Here's a list of curated songs that ${performerName} has selected for you to request.`;
 
     const { data: songData, error: songError } = await supabase
       .from('songs')
