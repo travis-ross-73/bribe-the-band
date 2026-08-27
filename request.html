@@ -381,6 +381,7 @@
   // --- State ------------------------------------------------------------
   let songs = [];
   let gigSession = null;
+  let performerAccountName = null; // fetched once at init — the account-level display_name
   let selectedSong = null; // null when this is a tip-only request
   let selectedTip = null;  // number, or 'custom'
   let isTipOnly = false;
@@ -469,17 +470,17 @@
     // performer's name (tonight's display-name override if the performer
     // set one in the console, otherwise their account name) shows instead
     // in the tip prompt and the song-list heading, where it's actually
-    // meaningful to the crowd.
+    // meaningful to the crowd. The account name itself won't change
+    // mid-show, so it's only fetched once here — but the override is
+    // re-checked on every refreshCapStatus() poll below, since Travis can
+    // change it live from the console while this page is already open.
     const { data: performerNameData } = await supabase
       .from('performers')
       .select('display_name')
       .eq('id', gigSession.performer_id)
       .maybeSingle();
-    const performerName = (gigSession.display_name_override && gigSession.display_name_override.trim())
-      || (performerNameData && performerNameData.display_name)
-      || 'the band';
-    tipOnlyText.textContent = `Like what you've heard from ${performerName} so far? Leave a tip!`;
-    songListHeading.textContent = `Here's a list of curated songs that ${performerName} has selected for you to request.`;
+    performerAccountName = performerNameData && performerNameData.display_name;
+    applyPerformerName();
 
     const { data: songData, error: songError } = await supabase
       .from('songs')
@@ -500,6 +501,17 @@
     setInterval(refreshCapStatus, CAP_POLL_MS);
   }
 
+  // Recomputes the effective performer name from whatever's currently in
+  // gigSession.display_name_override (kept up to date by refreshCapStatus
+  // below) and applies it to the tip prompt and song-list heading.
+  function applyPerformerName() {
+    const performerName = (gigSession.display_name_override && gigSession.display_name_override.trim())
+      || performerAccountName
+      || 'the band';
+    tipOnlyText.textContent = `Like what you've heard from ${performerName} so far? Leave a tip!`;
+    songListHeading.textContent = `Here's a list of curated songs that ${performerName} has selected for you to request.`;
+  }
+
   // Asks the DB (via a SECURITY DEFINER function, since anon users can't
   // read raw `requests` rows) which songs have already hit the nightly
   // request cap, which are currently in the active queue (with a running
@@ -507,6 +519,20 @@
   // Blank/no cap or cooldown set in the console = never capped/cooling down.
   async function refreshCapStatus() {
     if (!gigSession) return;
+
+    // Re-check the display-name override every poll too — Travis can change
+    // it live from the console while a crowd member already has this page
+    // open, and there's no other signal telling this page to refresh it.
+    const { data: gigRow } = await supabase
+      .from('gig_sessions')
+      .select('display_name_override')
+      .eq('id', gigSession.id)
+      .maybeSingle();
+    if (gigRow && gigRow.display_name_override !== gigSession.display_name_override) {
+      gigSession.display_name_override = gigRow.display_name_override;
+      applyPerformerName();
+    }
+
     const { data, error } = await supabase.rpc('get_song_request_status', {
       p_gig_session_id: gigSession.id
     });
