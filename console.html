@@ -257,6 +257,14 @@
   }
   .gig-setup-row select, .gig-setup-row button { margin-bottom: 0; }
   .button-caption { color: var(--muted); font-size: 0.78rem; margin: -2px 0 4px; }
+  .step-label {
+    color: var(--accent);
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 6px;
+  }
 
   /* Start the Set / Join as Follower, grouped as the live-performance actions */
   .gig-live-actions {
@@ -610,6 +618,7 @@
       <div class="crowd-link-status" id="crowd-link-status"></div>
 
       <div class="gig-setup-row">
+        <div class="step-label">Step 1 — Go Live</div>
         <select id="setlist-picker"></select>
         <button class="primary" id="start-gig-btn">Start New Gig</button>
         <div class="button-caption">Makes the crowd page live for tonight — do this once, before the show starts.</div>
@@ -617,8 +626,9 @@
       <div class="section-sub hidden" id="no-setlists-hint">No saved setlists yet — <a href="#" id="go-to-setlists-link">build one in the Setlists tab</a>.</div>
 
       <div class="gig-live-actions">
+        <div class="step-label">Step 2 — Perform</div>
         <button class="primary" id="start-set-btn" disabled>Start the Set (Open PDF Charts)</button>
-        <div class="button-caption">Opens the chart viewer — the screen you actually swipe through and perform from.</div>
+        <div class="button-caption">Opens the chart viewer in a new tab — the screen you actually swipe through and perform from.</div>
         <button class="secondary hidden" id="join-follower-btn">+ Join as Follower (for another band member's tablet)</button>
         <div class="section-sub hidden" id="join-follower-hint">Open this on a bandmate's tablet, logged in with the same account. It shows the same charts and swipes independently, but won't manage the request queue — that stays on this tablet (the "Master"). When a request gets accepted here, every Follower tablet briefly syncs to the same spot before splicing it in, so everyone's song order stays in sync.</div>
       </div>
@@ -996,6 +1006,11 @@
       joinFollowerBtn.classList.toggle('hidden', !hasSet);
       joinFollowerHint.classList.toggle('hidden', !hasSet);
       endGigBtn.classList.remove('hidden');
+      // Once a gig is live, "Start New Gig" becomes the rarer, more
+      // consequential action (it silently ends the current one) — demote it
+      // to secondary so "Start the Set" reads as the obvious next step.
+      startGigBtn.classList.remove('primary');
+      startGigBtn.classList.add('secondary');
     } else {
       activeGigStatus.classList.add('none');
       activeGigStatusText.textContent = 'No active gig right now.';
@@ -1004,6 +1019,9 @@
       joinFollowerBtn.classList.add('hidden');
       joinFollowerHint.classList.add('hidden');
       endGigBtn.classList.add('hidden');
+      // No gig live — this is the one thing to do, so give it full weight.
+      startGigBtn.classList.remove('secondary');
+      startGigBtn.classList.add('primary');
     }
     renderGigCapsPanel();
   }
