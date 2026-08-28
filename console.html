@@ -256,6 +256,15 @@
     margin-bottom: 16px;
   }
   .gig-setup-row select, .gig-setup-row button { margin-bottom: 0; }
+  .button-caption { color: var(--muted); font-size: 0.78rem; margin: -2px 0 4px; }
+  .step-label {
+    color: var(--accent);
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 6px;
+  }
 
   /* Start the Set / Join as Follower, grouped as the live-performance actions */
   .gig-live-actions {
@@ -609,13 +618,20 @@
       <div class="crowd-link-status" id="crowd-link-status"></div>
 
       <div class="gig-setup-row">
+        <div class="step-label">Step 1 — Go Live</div>
         <select id="setlist-picker"></select>
+        <input type="text" id="gig-display-name-input" placeholder="Defaults to your account name" maxlength="60" />
+        <div class="button-caption" id="gig-display-name-caption">Shown at the top of the crowd page tonight. Leave blank to use your account name.</div>
+        <div class="manage-song-status" id="gig-display-name-status"></div>
         <button class="primary" id="start-gig-btn">Start New Gig</button>
+        <div class="button-caption">Makes the crowd page live for tonight — do this once, before the show starts.</div>
       </div>
       <div class="section-sub hidden" id="no-setlists-hint">No saved setlists yet — <a href="#" id="go-to-setlists-link">build one in the Setlists tab</a>.</div>
 
       <div class="gig-live-actions">
-        <button class="primary" id="start-set-btn" disabled>Start the Set</button>
+        <div class="step-label">Step 2 — Perform</div>
+        <button class="primary" id="start-set-btn" disabled>Start the Set (Open PDF Charts)</button>
+        <div class="button-caption">Opens the chart viewer in a new tab — the screen you actually swipe through and perform from.</div>
         <button class="secondary hidden" id="join-follower-btn">+ Join as Follower (for another band member's tablet)</button>
         <div class="section-sub hidden" id="join-follower-hint">Open this on a bandmate's tablet, logged in with the same account. It shows the same charts and swipes independently, but won't manage the request queue — that stays on this tablet (the "Master"). When a request gets accepted here, every Follower tablet briefly syncs to the same spot before splicing it in, so everyone's song order stays in sync.</div>
       </div>
@@ -630,8 +646,15 @@
           </div>
           <input type="number" min="1" step="1" id="gig-cap-input" placeholder="No limit" />
         </div>
+        <div class="gig-cap-row">
+          <div>
+            <div class="gig-cap-title">Cooldown after playing (minutes)</div>
+            <div class="gig-cap-artist">Once you tap "Got it — play the song," the crowd can't re-request or boost it again until this many minutes pass. Leave blank for no cooldown.</div>
+          </div>
+          <input type="number" min="1" step="1" id="gig-cooldown-input" placeholder="No cooldown" />
+        </div>
         <div class="button-row">
-          <button class="secondary" id="save-gig-caps-btn">Save Cap for Tonight</button>
+          <button class="secondary" id="save-gig-caps-btn">Save for Tonight</button>
           <button class="secondary" id="reset-gig-caps-btn">Reset Request Counts</button>
         </div>
         <div class="manage-song-status" id="gig-caps-status"></div>
@@ -810,6 +833,9 @@
   const copyCrowdLinkBtn = document.getElementById('copy-crowd-link-btn');
   const crowdLinkStatus = document.getElementById('crowd-link-status');
   const setlistPicker = document.getElementById('setlist-picker');
+  const gigDisplayNameInput = document.getElementById('gig-display-name-input');
+  const gigDisplayNameCaption = document.getElementById('gig-display-name-caption');
+  const gigDisplayNameStatus = document.getElementById('gig-display-name-status');
   const startGigBtn = document.getElementById('start-gig-btn');
   const startSetBtn = document.getElementById('start-set-btn');
   const joinFollowerBtn = document.getElementById('join-follower-btn');
@@ -822,6 +848,7 @@
   const goToSetlistsLink = document.getElementById('go-to-setlists-link');
   const gigCapsPanel = document.getElementById('gig-caps-panel');
   const gigCapInput = document.getElementById('gig-cap-input');
+  const gigCooldownInput = document.getElementById('gig-cooldown-input');
   const saveGigCapsBtn = document.getElementById('save-gig-caps-btn');
   const resetGigCapsBtn = document.getElementById('reset-gig-caps-btn');
   const gigCapsStatus = document.getElementById('gig-caps-status');
@@ -920,6 +947,9 @@
     // otherwise look identical. Uses the band/artist display name, not the
     // URL handle, since that's what's actually meaningful to a person.
     consoleAccountNameEl.textContent = performer.display_name || performer.handle;
+    const accountName = performer.display_name || performer.handle;
+    gigDisplayNameInput.placeholder = accountName;
+    gigDisplayNameCaption.textContent = `Shown at the top of the crowd page tonight. Leave blank to use your account name ("${accountName}").`;
 
     loginView.classList.add('hidden');
     consoleView.classList.remove('hidden');
@@ -963,7 +993,7 @@
   async function loadActiveGig() {
     const { data } = await supabase
       .from('gig_sessions')
-      .select('id, gig_code, active_setlist_id, runtime_order, request_cap, cap_reset_at, status, created_at')
+      .select('id, gig_code, active_setlist_id, runtime_order, request_cap, cap_reset_at, cooldown_minutes, display_name_override, status, created_at')
       .eq('performer_id', performer.id)
       .eq('status', 'active')
       .order('created_at', { ascending: false })
@@ -985,6 +1015,13 @@
       joinFollowerBtn.classList.toggle('hidden', !hasSet);
       joinFollowerHint.classList.toggle('hidden', !hasSet);
       endGigBtn.classList.remove('hidden');
+      // Once a gig is live, "Start New Gig" becomes the rarer, more
+      // consequential action (it silently ends the current one) — demote it
+      // to secondary so "Start the Set" reads as the obvious next step.
+      startGigBtn.classList.remove('primary');
+      startGigBtn.classList.add('secondary');
+      gigDisplayNameInput.value = activeGig.display_name_override || '';
+      gigDisplayNameStatus.textContent = '';
     } else {
       activeGigStatus.classList.add('none');
       activeGigStatusText.textContent = 'No active gig right now.';
@@ -993,6 +1030,9 @@
       joinFollowerBtn.classList.add('hidden');
       joinFollowerHint.classList.add('hidden');
       endGigBtn.classList.add('hidden');
+      // No gig live — this is the one thing to do, so give it full weight.
+      startGigBtn.classList.remove('secondary');
+      startGigBtn.classList.add('primary');
     }
     renderGigCapsPanel();
   }
@@ -1035,18 +1075,21 @@
     gigCapsPanel.classList.remove('hidden');
     gigCapsStatus.textContent = '';
     gigCapInput.value = activeGig.request_cap ?? '';
+    gigCooldownInput.value = activeGig.cooldown_minutes ?? '';
   }
 
   saveGigCapsBtn.addEventListener('click', async () => {
     if (!activeGig) return;
-    const raw = gigCapInput.value.trim();
-    const newCap = raw ? parseInt(raw, 10) : null;
+    const rawCap = gigCapInput.value.trim();
+    const newCap = rawCap ? parseInt(rawCap, 10) : null;
+    const rawCooldown = gigCooldownInput.value.trim();
+    const newCooldown = rawCooldown ? parseInt(rawCooldown, 10) : null;
 
     gigCapsStatus.textContent = 'Saving…';
     gigCapsStatus.className = 'manage-song-status';
     const { error } = await supabase
       .from('gig_sessions')
-      .update({ request_cap: newCap })
+      .update({ request_cap: newCap, cooldown_minutes: newCooldown })
       .eq('id', activeGig.id);
 
     if (error) {
@@ -1055,6 +1098,7 @@
       return;
     }
     activeGig.request_cap = newCap;
+    activeGig.cooldown_minutes = newCooldown;
     gigCapsStatus.textContent = 'Saved for tonight.';
     gigCapsStatus.className = 'manage-song-status ok';
   });
@@ -1079,6 +1123,32 @@
     activeGig.cap_reset_at = nowIso;
     gigCapsStatus.textContent = 'Request counts reset for tonight.';
     gigCapsStatus.className = 'manage-song-status ok';
+  });
+
+  // Saves instantly on blur (not every keystroke) if tonight's gig is
+  // already live — e.g. fixing a typo without having to end and restart the
+  // gig. If no gig is active yet, this is a no-op: the typed value gets
+  // picked up when "Start New Gig" is clicked instead (see below).
+  gigDisplayNameInput.addEventListener('change', async () => {
+    if (!activeGig) return;
+    const newName = gigDisplayNameInput.value.trim() || null;
+    if (newName === (activeGig.display_name_override || null)) return;
+
+    gigDisplayNameStatus.textContent = 'Saving…';
+    gigDisplayNameStatus.className = 'manage-song-status';
+    const { error } = await supabase
+      .from('gig_sessions')
+      .update({ display_name_override: newName })
+      .eq('id', activeGig.id);
+
+    if (error) {
+      gigDisplayNameStatus.textContent = 'Could not save: ' + error.message;
+      gigDisplayNameStatus.className = 'manage-song-status err';
+      return;
+    }
+    activeGig.display_name_override = newName;
+    gigDisplayNameStatus.textContent = 'Saved — updated on the crowd page.';
+    gigDisplayNameStatus.className = 'manage-song-status ok';
   });
 
   startSetBtn.addEventListener('click', () => {
@@ -2109,19 +2179,24 @@
     const setlistId = setlistPicker.value;
     if (!setlistId) { alert('Pick (or save) a setlist first.'); return; }
 
-    // Carry forward the most recent gig's request cap, so it doesn't need
-    // re-entering every single night — Travis can still tweak it for
-    // tonight in the caps panel once it loads. A new gig always starts
-    // with a fresh (uncapped-by-reset) count, since requests are scoped to
-    // this brand-new gig_session_id.
+    // Carry forward the most recent gig's request cap and cooldown, so
+    // neither needs re-entering every single night — Travis can still
+    // tweak them for tonight in the caps panel once it loads. A new gig
+    // always starts with a fresh (uncapped-by-reset) count, since requests
+    // are scoped to this brand-new gig_session_id.
     const { data: lastGig } = await supabase
       .from('gig_sessions')
-      .select('request_cap')
+      .select('request_cap, cooldown_minutes, display_name_override')
       .eq('performer_id', performer.id)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
     const carriedCap = (lastGig && lastGig.request_cap) ?? null;
+    const carriedCooldown = (lastGig && lastGig.cooldown_minutes) ?? null;
+    // Whatever's currently typed wins; otherwise carry forward from the last
+    // gig the same way the cap and cooldown do.
+    const typedDisplayName = gigDisplayNameInput.value.trim();
+    const carriedDisplayName = typedDisplayName || (lastGig && lastGig.display_name_override) || null;
 
     // End any currently active gig for this performer
     await supabase
@@ -2139,6 +2214,8 @@
       active_setlist_id: setlistId,
       runtime_order: setlist ? setlist.song_ids : [],
       request_cap: carriedCap,
+      cooldown_minutes: carriedCooldown,
+      display_name_override: carriedDisplayName,
       status: 'active'
     });
     if (error) { alert('Could not start gig: ' + error.message); return; }

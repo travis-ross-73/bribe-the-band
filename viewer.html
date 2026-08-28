@@ -576,6 +576,7 @@
   const CHROME_AUTO_HIDE_MS = 3000;
   let pendingRequests = [];       // requests with status 'pending' for tonight's gig
   let drawerOpen = false;
+  let activeRequestInfoEntry = null; // the entry currently shown in the "was requested" box, so the close button knows what to mark played
   let requestPollTimer = null;
   // A page turn already triggers a check (see goToIndex), which covers the
   // common case for free — this timer is just a safety net for when the
@@ -904,6 +905,7 @@
     const rows = entry.requestInfo || [];
     if (rows.length === 0) return;
 
+    activeRequestInfoEntry = entry;
     requestInfoTitleEl.textContent = `🎤 "${entry.song.title}" was requested`;
     requestInfoSubEl.textContent = rows.length > 1
       ? `${rows.length} requests for this song tonight — say thanks, then close this to play it.`
@@ -929,6 +931,7 @@
   // different copy and no tip/note lines, for a song manually inserted
   // via the search tool rather than accepted from the crowd.
   function showManualAddBox(entry) {
+    activeRequestInfoEntry = null; // manually-added songs aren't crowd requests — never go on cooldown
     requestInfoTitleEl.textContent = `🎸 "${entry.song.title}" was manually added`;
     requestInfoSubEl.textContent = 'Dismiss and rock on! 🤘';
     requestInfoListEl.innerHTML = '';
@@ -936,7 +939,24 @@
     requestInfoOverlay.classList.remove('hidden');
   }
 
+  // Stamps played_at on every request row in this song's spliced batch —
+  // this is what starts its cooldown. Only ever called for a real crowd
+  // request (see showManualAddBox above), and only once per entry, since
+  // the overlay only shows once per entry (requestInfoShown).
+  async function markSongPlayed(entry) {
+    if (!gig || !entry || !entry.splicedAt) return;
+    const { error } = await supabase
+      .from('requests')
+      .update({ played_at: new Date().toISOString() })
+      .eq('gig_session_id', gig.id)
+      .eq('song_id', entry.song.id)
+      .eq('spliced_at', entry.splicedAt);
+    if (error) console.error('Could not mark song as played', error);
+  }
+
   requestInfoCloseBtn.addEventListener('click', () => {
+    if (activeRequestInfoEntry) markSongPlayed(activeRequestInfoEntry);
+    activeRequestInfoEntry = null;
     requestInfoOverlay.classList.add('hidden');
   });
 
@@ -1099,11 +1119,13 @@
     const newEntries = [];
     try {
       const pdf = await window.pdfjsLib.getDocument(song.chart_url).promise;
-      for (let p = 1; p <= pdf.numPages; p++) {
+      const splicedAt = extra && extra.splicedAt;
+    for (let p = 1; p <= pdf.numPages; p++) {
         newEntries.push({
           song, pdf, pageNum: p, isFirstPageOfSong: p === 1, isLastPageOfSong: p === pdf.numPages,
           requestInfo: p === 1 ? requestInfo : undefined,
           requestInfoShown: false,
+          splicedAt: p === 1 ? splicedAt : undefined,
           manualAdd: p === 1 ? manualAdd : undefined,
           manualAddShown: false,
         });
@@ -1114,6 +1136,7 @@
         song, pdf: null, pageNum: 1, isFirstPageOfSong: true, isLastPageOfSong: true,
         loadError: err && err.message ? err.message : 'Could not load this chart.',
         requestInfo, requestInfoShown: false,
+        splicedAt,
         manualAdd, manualAddShown: false,
       });
     }
@@ -1335,7 +1358,7 @@
       // revisit (forward or backward).
       const requestInfo = rows.map(r => ({ tipAmount: r.tip_amount, note: r.note }));
 
-      const insertedCount = await insertSongAtIndex(song, { requestInfo }, insertAt, songInsertAt);
+      const insertedCount = await insertSongAtIndex(song, { requestInfo, splicedAt }, insertAt, songInsertAt);
 
       await supabase.from('requests').update({
         spliced_at: splicedAt,
@@ -1416,6 +1439,7 @@
       if (!bySplicedAt.has(row.spliced_at)) {
         const group = {
           songId: row.song_id,
+          splicedAt: row.spliced_at,
           referenceSongId: row.splice_after_song_id,
           referencePageNum: row.splice_after_page_num,
           isManual: row.is_manual,
@@ -1468,7 +1492,7 @@
 
       const insertOptions = group.isManual
         ? { manualAdd: true }
-        : { requestInfo: group.rows.map(r => ({ tipAmount: r.tip_amount, note: r.note })) };
+        : { requestInfo: group.rows.map(r => ({ tipAmount: r.tip_amount, note: r.note })), splicedAt: group.splicedAt };
       const insertedCount = await insertSongAtIndex(song, insertOptions, insertAt, songInsertAt);
       insertAt += insertedCount;
       songInsertAt += 1;
