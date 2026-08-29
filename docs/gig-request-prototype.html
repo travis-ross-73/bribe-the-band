@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+<title>Request the Setlist</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #14161C;
+    --ink-2: #1C1F28;
+    --paper: #F5F0E6;
+    --paper-dim: #C9C3B4;
+    --amber: #F2A93B;
+    --amber-dim: #7A5A22;
+    --red: #8A2E2E;
+    --line: #3A3D46;
+    --display: 'Bebas Neue', sans-serif;
+    --body: 'Inter', sans-serif;
+    --mono: 'JetBrains Mono', monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--ink);
+    color: var(--paper);
+    font-family: var(--body);
+    -webkit-font-smoothing: antialiased;
+    min-height: 100%;
+  }
+  #app { min-height: 100vh; display: flex; flex-direction: column; }
+
+  /* ---------- top bar / mode switch (prototype only) ---------- */
+  .protobar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 16px;
+    background: #0E0F14;
+    border-bottom: 1px solid var(--line);
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    color: var(--paper-dim);
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .protobar .tag {
+    color: var(--amber);
+    font-weight: 700;
+  }
+  .modebtns { display: flex; gap: 6px; }
+  .modebtns button {
+    background: transparent;
+    border: 1px solid var(--line);
+    color: var(--paper-dim);
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-family: var(--mono);
+    font-size: 11px;
+    cursor: pointer;
+  }
+  .modebtns button.active {
+    border-color: var(--amber);
+    color: var(--amber);
+    background: rgba(242,169,59,0.08);
+  }
+  .gigcode-input {
+    background: var(--ink-2);
+    border: 1px solid var(--line);
+    color: var(--paper);
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 5px 8px;
+    border-radius: 6px;
+    width: 90px;
+    text-transform: uppercase;
+  }
+
+  main { flex: 1; padding: 20px 18px 100px; max-width: 720px; margin: 0 auto; width: 100%; }
+
+  /* ---------- header ---------- */
+  .stagehead { text-align: center; margin: 10px 0 22px; }
+  .stagehead .eyebrow {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.18em;
+    color: var(--amber); text-transform: uppercase; margin-bottom: 4px;
+  }
+  .stagehead h1 {
+    font-family: var(--display); font-size: 44px; letter-spacing: 0.02em;
+    margin: 0; color: var(--paper); line-height: 1;
+  }
+  .stagehead p { color: var(--paper-dim); font-size: 14px; margin-top: 8px; }
+
+  /* ---------- song list (chalkboard) ---------- */
+  .songlist { display: flex; flex-direction: column; gap: 10px; }
+  .song-row {
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--ink-2);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px 16px;
+    cursor: pointer;
+    transition: border-color 0.15s ease, transform 0.1s ease;
+  }
+  .song-row:active { transform: scale(0.99); }
+  .song-row:hover { border-color: var(--amber-dim); }
+  .song-main .title { font-size: 17px; font-weight: 600; color: var(--paper); }
+  .song-main .meta { font-family: var(--mono); font-size: 12px; color: var(--paper-dim); margin-top: 2px; }
+  .song-main .badge { font-family: var(--mono); font-size: 11px; margin-top: 4px; }
+  .song-main .badge.played { color: var(--paper-dim); }
+  .song-main .badge.pending { color: var(--amber); }
+  .song-main .badge.limit-warn { color: var(--amber); font-weight: 700; }
+  .song-main .badge.limit-max { color: var(--red); font-weight: 700; }
+  .song-row.disabled { opacity: 0.45; cursor: not-allowed; }
+  .song-row.disabled:hover { border-color: var(--line); }
+  .req-arrow { color: var(--amber); font-size: 20px; font-family: var(--display); }
+  .song-link { display: inline-block; margin-top: 4px; font-family: var(--mono); font-size: 11px; color: var(--paper-dim); text-decoration: none; border-bottom: 1px dotted var(--paper-dim); }
+
+  .empty { text-align: center; color: var(--paper-dim); padding: 40px 20px; font-size: 14px; }
+
+  /* ---------- bottom sheet ---------- */
+  .sheet-backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+    display: none; align-items: flex-end; justify-content: center;
+    z-index: 50;
+  }
+  .sheet-backdrop.open { display: flex; }
+  .sheet {
+    background: var(--ink-2);
+    border-top: 1px solid var(--line);
+    border-radius: 18px 18px 0 0;
+    width: 100%; max-width: 720px;
+    padding: 22px 20px 26px;
+    animation: slideup 0.2s ease-out;
+  }
+  @keyframes slideup { from { transform: translateY(30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+  .sheet h2 { font-family: var(--display); font-size: 30px; margin: 0 0 2px; letter-spacing: 0.02em; }
+  .sheet .sheet-meta { font-family: var(--mono); font-size: 12px; color: var(--paper-dim); margin-bottom: 18px; }
+
+  .tip-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
+  .tip-opt {
+    background: var(--ink); border: 1px solid var(--line); color: var(--paper);
+    font-family: var(--mono); font-size: 15px; font-weight: 700;
+    padding: 12px 0; border-radius: 8px; cursor: pointer;
+  }
+  .tip-opt.selected { border-color: var(--amber); color: var(--amber); background: rgba(242,169,59,0.08); }
+  .tip-custom {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 16px;
+  }
+  .tip-custom input {
+    flex: 1; background: var(--ink); border: 1px solid var(--line); color: var(--paper);
+    font-family: var(--mono); font-size: 15px; padding: 10px 12px; border-radius: 8px;
+  }
+  .name-field input {
+    width: 100%; background: var(--ink); border: 1px solid var(--line); color: var(--paper);
+    font-family: var(--body); font-size: 14px; padding: 10px 12px; border-radius: 8px; margin-bottom: 16px;
+  }
+  .name-field label, .tip-custom label { font-family: var(--mono); font-size: 11px; color: var(--paper-dim); display: block; margin-bottom: 6px; }
+
+  .pay-btn {
+    width: 100%; background: var(--amber); color: var(--ink); border: none;
+    font-family: var(--body); font-weight: 700; font-size: 15px;
+    padding: 15px 0; border-radius: 10px; cursor: pointer;
+  }
+  .pay-btn:disabled { opacity: 0.6; }
+  .pay-btn.processing { background: var(--paper-dim); }
+  .free-btn {
+    width: 100%; background: transparent; color: var(--paper-dim); border: 1px solid var(--line);
+    font-family: var(--body); font-size: 13px; padding: 10px 0; border-radius: 10px;
+    margin-top: 8px; cursor: pointer;
+  }
+  .cancel-link {
+    text-align: center; margin-top: 14px; font-size: 13px; color: var(--paper-dim); cursor: pointer;
+  }
+  .free-caption {
+    text-align: center; font-size: 11px; color: var(--paper-dim); margin-top: 6px; line-height: 1.4;
+  }
+  .success-check {
+    text-align: center; padding: 10px 0 4px;
+  }
+  .success-check .big { font-size: 40px; }
+  .success-check .msg { font-family: var(--mono); color: var(--amber); font-size: 13px; margin-top: 6px; }
+
+  /* ---------- STAGE VIEW ---------- */
+  .stage-main { max-width: 900px; }
+  .stage-topline {
+    display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 18px;
+    flex-wrap: wrap; gap: 10px;
+  }
+  .stage-topline h1 { font-family: var(--display); font-size: 38px; margin: 0; }
+  .stage-topline .count { font-family: var(--mono); color: var(--paper-dim); font-size: 13px; }
+
+  .stub-list { display: flex; flex-direction: column; gap: 12px; }
+  .stub {
+    position: relative;
+    display: flex; align-items: stretch;
+    background: var(--ink-2);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .stub .rank {
+    width: 64px; flex-shrink: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: var(--ink);
+    border-right: 2px dashed var(--line);
+    font-family: var(--display); font-size: 26px; color: var(--paper-dim);
+  }
+  .stub.top .rank { color: var(--ink); background: var(--amber); border-right-color: var(--ink); }
+  .stub .rank .lbl { font-family: var(--mono); font-size: 8px; letter-spacing: 0.08em; margin-top: 2px; }
+  .stub-body { flex: 1; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .stub-info .title { font-size: 18px; font-weight: 700; }
+  .stub-info .sub { font-family: var(--mono); font-size: 11px; color: var(--paper-dim); margin-top: 2px; }
+  .stub-tip { text-align: right; }
+  .stub-tip .amt { font-family: var(--mono); font-size: 20px; font-weight: 700; color: var(--amber); }
+  .stub-tip .amt.free { color: var(--paper-dim); font-size: 14px; }
+  .stub-actions { display: flex; gap: 6px; margin-top: 8px; }
+  .stub-actions button {
+    font-family: var(--mono); font-size: 10px; padding: 5px 8px; border-radius: 6px;
+    border: 1px solid var(--line); background: transparent; color: var(--paper-dim); cursor: pointer;
+  }
+  .stub.top { box-shadow: 0 0 22px rgba(242,169,59,0.25); border-color: var(--amber-dim); }
+  .stub-actions .play-btn { border-color: var(--amber); color: var(--amber); }
+  .stub-actions .play-btn:hover { background: rgba(242,169,59,0.1); }
+  .stub-actions .chart-btn { border-color: var(--paper-dim); color: var(--paper); }
+
+  .stage-settings {
+    display: flex; align-items: center; gap: 10px; margin-top: 22px;
+    padding: 12px 14px; background: var(--ink-2); border: 1px solid var(--line); border-radius: 10px;
+  }
+  .stage-settings label { font-family: var(--mono); font-size: 12px; color: var(--paper-dim); }
+  .stage-settings input {
+    width: 80px; background: var(--ink); border: 1px solid var(--line); color: var(--paper);
+    font-family: var(--mono); font-size: 13px; padding: 6px 8px; border-radius: 6px;
+  }
+
+  .stage-section-label {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; color: var(--paper-dim);
+    text-transform: uppercase; margin: 26px 0 10px;
+  }
+
+  .song-admin {
+    margin-top: 30px; border-top: 1px solid var(--line); padding-top: 18px;
+  }
+  .song-admin h3 { font-family: var(--display); font-size: 22px; margin: 0 0 10px; letter-spacing: 0.02em; }
+  .add-song-row { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .add-song-row input {
+    background: var(--ink-2); border: 1px solid var(--line); color: var(--paper);
+    font-family: var(--body); font-size: 13px; padding: 9px 10px; border-radius: 8px;
+  }
+  .add-song-row input.title-in { flex: 2; min-width: 140px; }
+  .add-song-row input.key-in { flex: 1; min-width: 70px; }
+  .add-song-row input.link-in { flex: 2; min-width: 160px; }
+  .add-song-row button {
+    background: var(--paper); color: var(--ink); border: none; font-weight: 700;
+    padding: 9px 14px; border-radius: 8px; cursor: pointer; font-size: 13px;
+  }
+  .admin-song-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 10px; border-bottom: 1px solid var(--line); font-size: 13px;
+  }
+  .admin-song-row .remove { color: var(--red); cursor: pointer; font-family: var(--mono); font-size: 11px; }
+
+  .footer-note {
+    text-align: center; color: var(--paper-dim); font-size: 11px; font-family: var(--mono);
+    margin-top: 30px; opacity: 0.7;
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+(function() {
+
+  // ---------------- config ----------------
+  var DEFAULT_SONGS = [
+    { id: 's1', title: 'Wonderwall', key: 'F#m', artist: 'Oasis' },
+    { id: 's2', title: 'Ho Hey', key: 'C', artist: 'The Lumineers' },
+    { id: 's3', title: 'Someone Like You', key: 'A', artist: 'Adele' },
+    { id: 's4', title: 'Wagon Wheel', key: 'G', artist: 'Old Crow Medicine Show' },
+    { id: 's5', title: 'Riptide', key: 'Am', artist: 'Vance Joy' }
+  ];
+  var TIP_PRESETS = [5, 10, 20, 50];
+
+  var state = {
+    mode: (new URLSearchParams(location.search).get('mode')) || 'request',
+    gigCode: (new URLSearchParams(location.search).get('gig')) || 'DEMO',
+    songs: [],
+    requests: [],
+    sheetOpen: false,
+    activeSong: null,
+    selectedTip: null,
+    customTip: '',
+    requestNote: '',
+    payStep: 'idle', // idle | processing | success
+    newSongTitle: '',
+    newSongArtist: '',
+    newSongKey: '',
+    newSongLink: '',
+    maxRequestsPerSong: null // null/0 = unlimited, per-gig cap on total requests for a song
+  };
+
+  function songsKey() { return 'gig:' + state.gigCode + ':songs'; }
+  function reqKey() { return 'gig:' + state.gigCode + ':requests'; }
+  function settingsKey() { return 'gig:' + state.gigCode + ':settings'; }
+
+  // ---------------- storage helpers ----------------
+  async function loadSongs() {
+    try {
+      var res = await window.storage.get(songsKey(), true);
+      state.songs = res ? JSON.parse(res.value) : DEFAULT_SONGS.slice();
+      if (!res) await saveSongs();
+    } catch (e) {
+      state.songs = DEFAULT_SONGS.slice();
+      try { await saveSongs(); } catch (e2) {}
+    }
+    render();
+  }
+  async function saveSongs() {
+    try { await window.storage.set(songsKey(), JSON.stringify(state.songs), true); } catch (e) { console.error(e); }
+  }
+  async function loadRequests() {
+    try {
+      var res = await window.storage.get(reqKey(), true);
+      state.requests = res ? JSON.parse(res.value) : [];
+    } catch (e) {
+      state.requests = [];
+    }
+    render();
+  }
+  async function saveRequests() {
+    try { await window.storage.set(reqKey(), JSON.stringify(state.requests), true); } catch (e) { console.error(e); }
+  }
+  async function loadSettings() {
+    try {
+      var res = await window.storage.get(settingsKey(), true);
+      var parsed = res ? JSON.parse(res.value) : {};
+      state.maxRequestsPerSong = parsed.maxRequestsPerSong || null;
+    } catch (e) {
+      state.maxRequestsPerSong = null;
+    }
+    render();
+  }
+  async function saveSettings() {
+    try {
+      await window.storage.set(settingsKey(), JSON.stringify({ maxRequestsPerSong: state.maxRequestsPerSong }), true);
+    } catch (e) { console.error(e); }
+  }
+
+  // ---------------- actions ----------------
+  function openSheet(song) {
+    state.activeSong = song;
+    state.sheetOpen = true;
+    state.selectedTip = null;
+    state.customTip = '';
+    state.requestNote = '';
+    state.payStep = 'idle';
+    render();
+  }
+  function closeSheet() {
+    state.sheetOpen = false;
+    state.activeSong = null;
+    render();
+  }
+  function selectTip(v) {
+    state.selectedTip = v;
+    state.customTip = '';
+    render();
+  }
+  function setCustomTip(v) {
+    state.customTip = v;
+    state.selectedTip = null;
+  }
+
+  function currentTipAmount() {
+    if (state.customTip && parseFloat(state.customTip) > 0) return parseFloat(state.customTip);
+    if (state.selectedTip) return state.selectedTip;
+    return 0;
+  }
+
+  async function submitRequest(withTip) {
+    var amount = withTip ? currentTipAmount() : 0;
+    if (withTip && amount <= 0) return;
+
+    if (withTip) {
+      state.payStep = 'processing';
+      render();
+      await new Promise(function(r) { setTimeout(r, 1100); }); // simulated checkout
+    }
+
+    var req = {
+      id: 'r_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+      songId: state.activeSong.id,
+      title: state.activeSong.title,
+      key: state.activeSong.key,
+      artist: state.activeSong.artist,
+      tip: amount,
+      note: state.requestNote || null,
+      ts: Date.now(),
+      status: 'pending',
+      playedAt: null
+    };
+    state.requests.push(req);
+    await saveRequests();
+
+    state.payStep = 'success';
+    render();
+    setTimeout(function() { closeSheet(); }, 1300);
+  }
+
+  async function markPlayed(id) {
+    var r = state.requests.find(function(x) { return x.id === id; });
+    if (r) { r.status = 'played'; r.playedAt = Date.now(); }
+    await saveRequests();
+  }
+  async function dismiss(id) {
+    state.requests = state.requests.filter(function(x) { return x.id !== id; });
+    await saveRequests();
+  }
+
+  async function addSong() {
+    if (!state.newSongTitle.trim()) return;
+    state.songs.push({
+      id: 's_' + Date.now(),
+      title: state.newSongTitle.trim(),
+      artist: state.newSongArtist.trim() || '',
+      key: state.newSongKey.trim() || '—',
+      link: state.newSongLink.trim() || null
+    });
+    state.newSongTitle = '';
+    state.newSongArtist = '';
+    state.newSongKey = '';
+    state.newSongLink = '';
+    await saveSongs();
+    render();
+  }
+
+  function timeAgo(ts) {
+    var diffMin = Math.round((Date.now() - ts) / 60000);
+    if (diffMin < 1) return 'just now';
+    if (diffMin === 1) return '1 min ago';
+    if (diffMin < 60) return diffMin + ' min ago';
+    var hrs = Math.round(diffMin / 60);
+    return hrs + (hrs === 1 ? ' hr ago' : ' hrs ago');
+  }
+
+  function songRequestCount(songId) {
+    return state.requests.filter(function(r) { return r.songId === songId; }).length;
+  }
+
+  // per-song request/play stats for this gig, used in the audience view
+  function songStats(songId) {
+    var matches = state.requests.filter(function(r) { return r.songId === songId; });
+    if (!matches.length) return null;
+    matches.sort(function(a, b) { return b.ts - a.ts; });
+    var mostRecent = matches[0];
+    var totalCount = matches.length;
+    if (mostRecent.status === 'played') {
+      return { label: 'Played ' + timeAgo(mostRecent.playedAt || mostRecent.ts), cls: 'played', count: totalCount };
+    }
+    return { label: 'Requested ' + timeAgo(mostRecent.ts), cls: 'pending', count: totalCount };
+  }
+
+  // scarcity / cap messaging based on the gig's max-requests-per-song setting
+  function songLimitInfo(songId) {
+    var max = state.maxRequestsPerSong;
+    if (!max || max <= 0) return null;
+    var count = songRequestCount(songId);
+    if (count >= max) {
+      return { atLimit: true, message: 'Already requested ' + count + 'x tonight \u2014 that\u2019s the limit for tonight.' };
+    }
+    var remaining = max - count;
+    if (remaining === 1) {
+      return { atLimit: false, message: 'You can request this 1 more time tonight.' };
+    }
+    return null;
+  }
+  async function removeSong(id) {
+    state.songs = state.songs.filter(function(s) { return s.id !== id; });
+    await saveSongs();
+    render();
+  }
+
+  function setMode(m) {
+    state.mode = m;
+    try {
+      var url = new URL(location.href);
+      url.searchParams.set('mode', m);
+      history.replaceState(null, '', url);
+    } catch (e) { /* sandboxed preview can't rewrite the URL — safe to ignore here */ }
+    render();
+  }
+  function setGigCode(v) {
+    state.gigCode = v.toUpperCase();
+    try {
+      var url = new URL(location.href);
+      url.searchParams.set('gig', state.gigCode);
+      history.replaceState(null, '', url);
+    } catch (e) { /* sandboxed preview can't rewrite the URL — safe to ignore here */ }
+    loadSongs();
+    loadRequests();
+    loadSettings();
+  }
+
+  // ---------------- render helpers ----------------
+  function esc(s) {
+    var d = document.createElement('div');
+    d.innerText = s == null ? '' : s;
+    return d.innerHTML;
+  }
+
+  function protobar() {
+    return '' +
+      '<div class="protobar">' +
+        '<div><span class="tag">PROTOTYPE</span> &middot; gig code ' +
+          '<input class="gigcode-input" id="gigCodeInput" value="' + esc(state.gigCode) + '" maxlength="10" /></div>' +
+        '<div class="modebtns">' +
+          '<button data-modebtn="request" class="' + (state.mode === 'request' ? 'active' : '') + '">Audience view</button>' +
+          '<button data-modebtn="stage" class="' + (state.mode === 'stage' ? 'active' : '') + '">Stage / iPad view</button>' +
+        '</div>' +
+      '</div>';
+  }
+
+  function renderRequestView() {
+    var rows = state.songs.map(function(s) {
+      var stat = songStats(s.id);
+      var limitInfo = songLimitInfo(s.id);
+      var badge = stat ? '<div class="badge ' + stat.cls + '">' + esc(stat.label) + (stat.count > 1 ? ' &middot; ' + stat.count + 'x tonight' : '') + '</div>' : '';
+      var limitBadge = limitInfo ? '<div class="badge ' + (limitInfo.atLimit ? 'limit-max' : 'limit-warn') + '">' + esc(limitInfo.message) + '</div>' : '';
+      var disabledCls = limitInfo && limitInfo.atLimit ? ' disabled' : '';
+      return '' +
+        '<div class="song-row' + disabledCls + '" data-song="' + s.id + '">' +
+          '<div class="song-main">' +
+            '<div class="title">' + esc(s.title) + '</div>' +
+            (s.artist ? '<div class="meta">' + esc(s.artist) + '</div>' : '') +
+            badge + limitBadge +
+          '</div>' +
+          '<div class="req-arrow">' + (limitInfo && limitInfo.atLimit ? '&times;' : '+') + '</div>' +
+        '</div>';
+    }).join('');
+
+    var sheet = '';
+    if (state.sheetOpen && state.activeSong) {
+      if (state.payStep === 'success') {
+        sheet = '' +
+          '<div class="success-check">' +
+            '<div class="big">&#127925;</div>' +
+            '<div class="msg">Request sent &mdash; you\'re on the list</div>' +
+          '</div>';
+      } else {
+        var tipBtns = TIP_PRESETS.map(function(v) {
+          return '<button class="tip-opt ' + (state.selectedTip === v ? 'selected' : '') + '" data-tip="' + v + '">$' + v + '</button>';
+        }).join('');
+        var processing = state.payStep === 'processing';
+        sheet = '' +
+          '<h2>' + esc(state.activeSong.title) + '</h2>' +
+          (state.activeSong.artist ? '<div class="sheet-meta">' + esc(state.activeSong.artist) + '</div>' : '') +
+          '<div class="name-field">' +
+            '<label>Add a note (optional)</label>' +
+            '<input id="noteInput" type="text" placeholder="e.g. &quot;for my wife&quot;, &quot;Erik\'s birthday&quot;, &quot;our first dance&quot;" value="' + esc(state.requestNote) + '" ' + (processing ? 'disabled' : '') + ' />' +
+          '</div>' +
+          '<div class="tip-grid">' + tipBtns + '</div>' +
+          '<div class="tip-custom">' +
+            '<label style="margin:0;">Custom</label>' +
+            '<input id="customTipInput" type="number" min="1" placeholder="$ amount" value="' + esc(state.customTip) + '" ' + (processing ? 'disabled' : '') + ' />' +
+          '</div>' +
+          '<button class="pay-btn ' + (processing ? 'processing' : '') + '" id="payBtn" ' + (processing ? 'disabled' : '') + '>' +
+            (processing ? 'Processing payment&hellip;' : 'Tip $' + (currentTipAmount() || '0') + ' &amp; request') +
+          '</button>' +
+          '<button class="free-btn" id="freeBtn" ' + (processing ? 'disabled' : '') + '>Request without a tip</button>' +
+          '<div class="free-caption">Tips move a request up the line &mdash; a no-tip request still gets played, just after the tipped ones.</div>' +
+          '<div class="cancel-link" id="cancelSheet">Cancel</div>';
+      }
+    }
+
+    return '' +
+      '<main>' +
+        '<div class="stagehead">' +
+          '<div class="eyebrow">Tonight\'s set</div>' +
+          '<h1>Request a Song</h1>' +
+          '<p>Pick a tune below. Tip what it\'s worth to hear it next.</p>' +
+        '</div>' +
+        '<div class="songlist">' + (rows || '<div class="empty">No songs loaded yet.</div>') + '</div>' +
+      '</main>' +
+      '<div class="sheet-backdrop ' + (state.sheetOpen ? 'open' : '') + '" id="sheetBackdrop">' +
+        '<div class="sheet" onclick="event.stopPropagation()">' + sheet + '</div>' +
+      '</div>';
+  }
+
+  function renderStageView() {
+    var pending = state.requests.filter(function(r) { return r.status === 'pending'; });
+    pending.sort(function(a, b) {
+      if (b.tip !== a.tip) return b.tip - a.tip;
+      return a.ts - b.ts;
+    });
+
+    var stubs = pending.map(function(r, i) {
+      var isTop = i === 0;
+      var song = state.songs.find(function(s) { return s.id === r.songId; });
+      var chartBtn = (song && song.link) ? '<button class="chart-btn" data-openchart="' + esc(song.link) + '">Open chart &#8599;</button>' : '';
+      return '' +
+        '<div class="stub ' + (isTop ? 'top' : '') + '">' +
+          '<div class="rank"><div>' + (i + 1) + '</div><div class="lbl">' + (isTop ? 'NEXT UP' : 'QUEUE') + '</div></div>' +
+          '<div class="stub-body">' +
+            '<div class="stub-info">' +
+              '<div class="title">' + esc(r.title) + '</div>' +
+              '<div class="sub">Key of ' + esc(r.key) + (r.note ? ' &middot; Note: ' + esc(r.note) : '') + '</div>' +
+              '<div class="stub-actions">' +
+                chartBtn +
+                '<button class="play-btn" data-play="' + r.id + '">Mark played</button>' +
+                '<button data-dismiss="' + r.id + '">Dismiss</button>' +
+              '</div>' +
+            '</div>' +
+            '<div class="stub-tip">' +
+              '<div class="amt ' + (r.tip > 0 ? '' : 'free') + '">' + (r.tip > 0 ? '$' + r.tip.toFixed(0) : 'no tip') + '</div>' +
+            '</div>' +
+          '</div>' +
+        '</div>';
+    }).join('');
+
+    var songAdminRows = state.songs.map(function(s) {
+      return '' +
+        '<div class="admin-song-row">' +
+          '<span>' + esc(s.title) + (s.artist ? ' &middot; ' + esc(s.artist) : '') + (s.key && s.key !== '—' ? ' &middot; ' + esc(s.key) : '') + (s.link ? ' &middot; <a class="song-link" href="' + esc(s.link) + '" target="_blank" rel="noopener">link &#8599;</a>' : '') + '</span>' +
+          '<span class="remove" data-removesong="' + s.id + '">remove</span>' +
+        '</div>';
+    }).join('');
+
+    return '' +
+      '<main class="stage-main">' +
+        '<div class="stage-topline">' +
+          '<h1>Live Queue</h1>' +
+          '<div class="count">' + pending.length + ' pending &middot; refreshes automatically</div>' +
+        '</div>' +
+        '<div class="stub-list">' + (stubs || '<div class="empty">No requests yet &mdash; share the audience link to get the night started.</div>') + '</div>' +
+
+        '<div class="stage-settings">' +
+          '<label for="maxReqInput">Max requests per song tonight</label>' +
+          '<input id="maxReqInput" type="number" min="0" placeholder="no limit" value="' + (state.maxRequestsPerSong || '') + '" />' +
+        '</div>' +
+
+        '<div class="song-admin">' +
+          '<h3>Set List</h3>' +
+          '<div class="add-song-row">' +
+            '<input class="title-in" id="newSongTitle" placeholder="Song title" value="' + esc(state.newSongTitle) + '" />' +
+            '<input class="title-in" id="newSongArtist" placeholder="Artist" value="' + esc(state.newSongArtist) + '" />' +
+            '<input class="key-in" id="newSongKey" placeholder="Key" value="' + esc(state.newSongKey) + '" />' +
+            '<input class="link-in" id="newSongLink" placeholder="Chart/sheet link (optional)" value="' + esc(state.newSongLink) + '" />' +
+            '<button id="addSongBtn">Add</button>' +
+          '</div>' +
+          songAdminRows +
+        '</div>' +
+
+        '<div class="footer-note">Audience link: this page with ?mode=request&amp;gig=' + esc(state.gigCode) + '</div>' +
+      '</main>';
+  }
+
+  function render() {
+    var html = protobar() + (state.mode === 'stage' ? renderStageView() : renderRequestView());
+    document.getElementById('app').innerHTML = html;
+    bindEvents();
+  }
+
+  // avoid stomping on the setlist inputs mid-keystroke when the background poll refreshes
+  function isTypingInForm() {
+    var el = document.activeElement;
+    return el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA');
+  }
+
+  function bindEvents() {
+    var gigInput = document.getElementById('gigCodeInput');
+    if (gigInput) {
+      gigInput.addEventListener('change', function(e) { setGigCode(e.target.value || 'DEMO'); });
+    }
+    document.querySelectorAll('[data-modebtn]').forEach(function(btn) {
+      btn.addEventListener('click', function() { setMode(btn.getAttribute('data-modebtn')); });
+    });
+
+    // request view
+    document.querySelectorAll('[data-song]').forEach(function(row) {
+      row.addEventListener('click', function() {
+        var id = row.getAttribute('data-song');
+        var song = state.songs.find(function(s) { return s.id === id; });
+        var limitInfo = song ? songLimitInfo(song.id) : null;
+        if (song && !(limitInfo && limitInfo.atLimit)) openSheet(song);
+      });
+    });
+    var backdrop = document.getElementById('sheetBackdrop');
+    if (backdrop) backdrop.addEventListener('click', closeSheet);
+    var cancelEl = document.getElementById('cancelSheet');
+    if (cancelEl) cancelEl.addEventListener('click', closeSheet);
+    document.querySelectorAll('[data-tip]').forEach(function(btn) {
+      btn.addEventListener('click', function() { selectTip(parseFloat(btn.getAttribute('data-tip'))); render(); });
+    });
+    var customInput = document.getElementById('customTipInput');
+    if (customInput) {
+      customInput.addEventListener('input', function(e) {
+        state.customTip = e.target.value;
+        state.selectedTip = null;
+        var payBtn = document.getElementById('payBtn');
+        if (payBtn) payBtn.innerText = 'Tip $' + (currentTipAmount() || '0') + ' & request';
+      });
+    }
+    var noteInput = document.getElementById('noteInput');
+    if (noteInput) {
+      noteInput.addEventListener('input', function(e) { state.requestNote = e.target.value; });
+    }
+    var payBtn = document.getElementById('payBtn');
+    if (payBtn) payBtn.addEventListener('click', function() { submitRequest(true); });
+    var freeBtn = document.getElementById('freeBtn');
+    if (freeBtn) freeBtn.addEventListener('click', function() { submitRequest(false); });
+
+    // stage view
+    document.querySelectorAll('[data-play]').forEach(function(btn) {
+      btn.addEventListener('click', function() { markPlayed(btn.getAttribute('data-play')).then(render); });
+    });
+    document.querySelectorAll('[data-dismiss]').forEach(function(btn) {
+      btn.addEventListener('click', function() { dismiss(btn.getAttribute('data-dismiss')).then(render); });
+    });
+    document.querySelectorAll('[data-openchart]').forEach(function(btn) {
+      btn.addEventListener('click', function() { window.open(btn.getAttribute('data-openchart'), '_blank'); });
+    });
+    var addBtn = document.getElementById('addSongBtn');
+    if (addBtn) addBtn.addEventListener('click', addSong);
+    var newTitle = document.getElementById('newSongTitle');
+    if (newTitle) newTitle.addEventListener('input', function(e) { state.newSongTitle = e.target.value; });
+    var newArtist = document.getElementById('newSongArtist');
+    if (newArtist) newArtist.addEventListener('input', function(e) { state.newSongArtist = e.target.value; });
+    var newKey = document.getElementById('newSongKey');
+    if (newKey) newKey.addEventListener('input', function(e) { state.newSongKey = e.target.value; });
+    var newLink = document.getElementById('newSongLink');
+    if (newLink) newLink.addEventListener('input', function(e) { state.newSongLink = e.target.value; });
+    document.querySelectorAll('[data-removesong]').forEach(function(el) {
+      el.addEventListener('click', function() { removeSong(el.getAttribute('data-removesong')); });
+    });
+    var maxReqInput = document.getElementById('maxReqInput');
+    if (maxReqInput) {
+      maxReqInput.addEventListener('change', function(e) {
+        var v = parseInt(e.target.value, 10);
+        state.maxRequestsPerSong = (v > 0) ? v : null;
+        saveSettings();
+        render();
+      });
+    }
+  }
+
+  // ---------------- boot ----------------
+  render();
+  loadSongs();
+  loadRequests();
+  loadSettings();
+
+  // light polling so the stage view feels "live" without a real server push.
+  // skipped while the audience sheet is open OR while someone is mid-keystroke
+  // in a form field, so typing (e.g. adding a setlist song) never gets stomped.
+  setInterval(function() {
+    if (!state.sheetOpen && !isTypingInForm()) loadRequests();
+  }, 4000);
+
+})();
+</script>
+</body>
+</html>
