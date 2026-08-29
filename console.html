@@ -625,6 +625,7 @@
         <div class="manage-song-status" id="gig-display-name-status"></div>
         <button class="primary" id="start-gig-btn">Start New Gig</button>
         <div class="button-caption">Makes the crowd page live for tonight — do this once, before the show starts.</div>
+        <div class="section-sub">Gigs with zero activity auto-end after 12 hours.</div>
       </div>
       <div class="section-sub hidden" id="no-setlists-hint">No saved setlists yet — <a href="#" id="go-to-setlists-link">build one in the Setlists tab</a>.</div>
 
@@ -634,6 +635,18 @@
         <div class="button-caption">Opens the chart viewer in a new tab — the screen you actually swipe through and perform from.</div>
         <button class="secondary hidden" id="join-follower-btn">+ Join as Follower (for another band member's tablet)</button>
         <div class="section-sub hidden" id="join-follower-hint">Open this on a bandmate's tablet, logged in with the same account. It shows the same charts and swipes independently, but won't manage the request queue — that stays on this tablet (the "Master"). When a request gets accepted here, every Follower tablet briefly syncs to the same spot before splicing it in, so everyone's song order stays in sync.</div>
+      </div>
+
+      <div id="follower-link-panel" class="hidden">
+        <h3>Followers (Their Own Accounts)</h3>
+        <div class="section-sub">Invite a bandmate with their own login to follow tonight's set — share this link or read them the code. They'll log in (or create a free account) and automatically follow along; you'll see them listed below and can remove anyone anytime. Removed automatically when tonight's gig ends.</div>
+        <div class="crowd-link-row">
+          <span class="crowd-link-label">Follower join link</span>
+          <a id="follower-join-link-url" class="crowd-link-url" href="#" target="_blank" rel="noopener">—</a>
+          <button class="tiny" id="copy-follower-link-btn">Copy Link</button>
+        </div>
+        <div class="crowd-link-status" id="follower-link-status"></div>
+        <div id="follower-roster"></div>
       </div>
 
       <div id="gig-caps-panel" class="hidden">
@@ -840,6 +853,11 @@
   const startSetBtn = document.getElementById('start-set-btn');
   const joinFollowerBtn = document.getElementById('join-follower-btn');
   const joinFollowerHint = document.getElementById('join-follower-hint');
+  const followerLinkPanel = document.getElementById('follower-link-panel');
+  const followerJoinLinkUrlEl = document.getElementById('follower-join-link-url');
+  const copyFollowerLinkBtn = document.getElementById('copy-follower-link-btn');
+  const followerLinkStatus = document.getElementById('follower-link-status');
+  const followerRosterEl = document.getElementById('follower-roster');
   const requestListEl = document.getElementById('request-list');
   const requestActivityHeader = document.getElementById('request-activity-header');
   const requestActivityStats = document.getElementById('request-activity-stats');
@@ -991,6 +1009,20 @@
   }
 
   async function loadActiveGig() {
+    // Check-and-end any stale gig of ours first (item 20, decided 2026-08-27)
+    // so a gig that's been sitting with zero activity for 12+ hours shows
+    // as ended here even if no crowd-page poll has triggered it yet.
+    const { data: candidate } = await supabase
+      .from('gig_sessions')
+      .select('id')
+      .eq('performer_id', performer.id)
+      .eq('status', 'active')
+      .order('created_at', { ascending: false })
+      .maybeSingle();
+    if (candidate) {
+      await supabase.rpc('check_and_end_stale_gig', { p_gig_session_id: candidate.id });
+    }
+
     const { data } = await supabase
       .from('gig_sessions')
       .select('id, gig_code, active_setlist_id, runtime_order, request_cap, cap_reset_at, cooldown_minutes, display_name_override, status, created_at')
@@ -1000,6 +1032,56 @@
       .maybeSingle();
     activeGig = data || null;
     renderActiveGigStatus();
+    renderFollowerLink();
+    await loadFollowerRoster();
+  }
+
+  // ---------------- Followers (own-account join-by-link, item 22) ----------------
+  function renderFollowerLink() {
+    if (!activeGig) {
+      followerLinkPanel.classList.add('hidden');
+      return;
+    }
+    followerLinkPanel.classList.remove('hidden');
+    const url = `${window.location.origin}/viewer.html?join=${activeGig.gig_code}`;
+    followerJoinLinkUrlEl.textContent = url;
+    followerJoinLinkUrlEl.href = url;
+  }
+
+  copyFollowerLinkBtn.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(followerJoinLinkUrlEl.href);
+      followerLinkStatus.textContent = 'Copied!';
+    } catch (err) {
+      followerLinkStatus.textContent = 'Could not copy — long-press the link above to copy it manually.';
+    }
+    setTimeout(() => { followerLinkStatus.textContent = ''; }, 2500);
+  });
+
+  async function loadFollowerRoster() {
+    if (!activeGig) {
+      followerRosterEl.innerHTML = '';
+      return;
+    }
+    const { data, error } = await supabase.rpc('get_gig_followers', { p_gig_session_id: activeGig.id });
+    if (error || !data || data.length === 0) {
+      followerRosterEl.innerHTML = '<div class="empty-note">No one has joined as a Follower yet tonight.</div>';
+      return;
+    }
+    followerRosterEl.innerHTML = `<div class="builder-col-label" style="margin-top:10px;">Following tonight (${data.length})</div>` +
+      data.map(f => `
+        <div class="top-song-row">
+          <span>${escapeHtml(f.display_name || f.handle || 'A follower')}</span>
+          <button class="tiny" data-remove-follower="${f.gig_follower_id}">Remove</button>
+        </div>
+      `).join('');
+    followerRosterEl.querySelectorAll('[data-remove-follower]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Remove this follower? They will stop following your live set.')) return;
+        await supabase.rpc('remove_gig_follower', { p_gig_follower_id: btn.dataset.removeFollower });
+        loadFollowerRoster();
+      });
+    });
   }
 
   // ---------------- Rendering: gig status ----------------
@@ -1183,8 +1265,14 @@
 
     if (error) { alert('Could not end the gig: ' + error.message); return; }
 
+    // Release any joined Followers (item 22's "auto-leave on gig end") —
+    // best-effort, doesn't block the gig itself from ending if it fails.
+    await supabase.rpc('release_gig_followers', { p_gig_session_id: activeGig.id });
+
     activeGig = null;
     renderActiveGigStatus();
+    renderFollowerLink();
+    await loadFollowerRoster();
     await renderRequests();
   });
 
@@ -2198,7 +2286,12 @@
     const typedDisplayName = gigDisplayNameInput.value.trim();
     const carriedDisplayName = typedDisplayName || (lastGig && lastGig.display_name_override) || null;
 
-    // End any currently active gig for this performer
+    // End any currently active gig for this performer, releasing its
+    // Followers too (item 22's "auto-leave on gig end" — starting a new
+    // gig implicitly ends the old one, same as an explicit "End Gig").
+    if (activeGig) {
+      await supabase.rpc('release_gig_followers', { p_gig_session_id: activeGig.id });
+    }
     await supabase
       .from('gig_sessions')
       .update({ status: 'ended' })
@@ -2283,8 +2376,15 @@
       requests = reqData || [];
     }
 
+    // Followed-gig tags (item 24, decided 2026-08-29): how many distinct
+    // accounts joined each gig as a Follower — drives the "Followed gig —
+    // N joined" tag and the solo-vs-followed tip split below. Best-effort:
+    // a failure here shouldn't block the rest of the report from loading.
+    const { data: followerCounts } = await supabase.rpc('get_follower_counts_for_my_gigs');
+    const followerCountByGig = new Map((followerCounts || []).map(f => [f.gig_session_id, f.joined_count]));
+
     reportingStatusEl.classList.add('hidden');
-    allReportingGigs = gigs || [];
+    allReportingGigs = (gigs || []).map(g => ({ ...g, followerCount: followerCountByGig.get(g.id) || 0 }));
     allReportingRequests = requests;
     applyReportingFilter();
   }
@@ -2357,6 +2457,19 @@
       <div class="report-stat"><div class="report-stat-value">${tipOnlyCount}</div><div class="report-stat-label">Tip-only (no song)</div></div>
       <div class="report-stat"><div class="report-stat-value">${gigs.length}</div><div class="report-stat-label">Gigs run</div></div>
     `;
+
+    // Solo-vs-followed split (item 24, decided 2026-08-29): only shown once
+    // at least one gig in this range ever had a Follower join, so a solo
+    // performer's report looks exactly like it always did.
+    const followedGigIds = new Set(gigs.filter(g => g.followerCount > 0).map(g => g.id));
+    if (followedGigIds.size > 0) {
+      const soloTips = requests.filter(r => !followedGigIds.has(r.gig_session_id)).reduce((sum, r) => sum + Number(r.tip_amount || 0), 0);
+      const followedTips = requests.filter(r => followedGigIds.has(r.gig_session_id)).reduce((sum, r) => sum + Number(r.tip_amount || 0), 0);
+      lifetimeSummaryEl.innerHTML += `
+        <div class="report-stat"><div class="report-stat-value">${formatMoney(soloTips)}</div><div class="report-stat-label">Tips — solo gigs</div></div>
+        <div class="report-stat"><div class="report-stat-value">${formatMoney(followedTips)}</div><div class="report-stat-label">Tips — gigs with Followers</div></div>
+      `;
+    }
 
     const songTotals = {};
     songRequests.forEach(r => {
@@ -2434,7 +2547,7 @@
           <div class="gig-report-top">
             <div>
               <span class="gig-report-date">${dateLabel}</span>
-              <span class="gig-report-status"> — ${g.status === 'active' ? 'live now' : 'ended'} · ${escapeHtml(g.gig_code)}</span>
+              <span class="gig-report-status"> — ${g.status === 'active' ? 'live now' : 'ended'} · ${escapeHtml(g.gig_code)}${g.followerCount > 0 ? ` · 👥 Followed gig — ${g.followerCount} joined` : ''}</span>
             </div>
             <div class="gig-report-stats">${gigSongRequests.length} requests · ${formatMoney(gigTips)}</div>
           </div>

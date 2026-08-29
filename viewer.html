@@ -391,6 +391,18 @@
     color: var(--text);
     font-weight: 400;
   }
+  .follower-login-input {
+    width: 100%;
+    max-width: 320px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid #2a2e40;
+    background: var(--card);
+    color: var(--text);
+    font-size: 0.95rem;
+  }
+  .follower-login-status { color: var(--danger); font-size: 0.85rem; min-height: 1.2em; }
+  .follower-login-status.ok { color: var(--accent); }
   .spinner {
     width: 34px;
     height: 34px;
@@ -437,6 +449,16 @@
       <h2>No active gig right now</h2>
       <p>Start a gig from the console before starting the set.</p>
       <button onclick="exitToConsole()">Back to Console</button>
+    </div>
+
+    <div class="full-screen-message hidden" id="follower-login-screen">
+      <h2>Join as a Follower</h2>
+      <p>Log in with your own account to follow tonight's set on this device.</p>
+      <input type="email" id="follower-login-email" class="follower-login-input" placeholder="Email" autocomplete="username" />
+      <input type="password" id="follower-login-password" class="follower-login-input" placeholder="Password" autocomplete="current-password" />
+      <button id="follower-login-btn">Log In</button>
+      <div class="follower-login-status" id="follower-login-status"></div>
+      <p><a href="#" id="follower-signup-link" style="color:var(--accent);">New here? Create a free account</a></p>
     </div>
 
     <div class="full-screen-message hidden" id="end-screen">
@@ -519,7 +541,15 @@
   // passes ?role=follower to anything, so nothing here changes for them —
   // they're always Master, same as before this feature existed.
   const urlParams = new URLSearchParams(window.location.search);
-  const role = urlParams.get('role') === 'follower' ? 'follower' : 'master';
+  let role = urlParams.get('role') === 'follower' ? 'follower' : 'master';
+  // ?join=<gig_code> (item 22, decided 2026-08-29): a Follower joining with
+  // their OWN account via a shared link/code, distinct from the legacy
+  // ?role=follower shared-login path above. Always forces Follower mode —
+  // "Master exclusivity... no exceptions" — and the gig/song queries below
+  // are scoped to the gig owner's performer id (gigOwnerPerformerId), not
+  // the logged-in user's own, since a joined Follower is a different account
+  // than the Master whose set they're following.
+  const joinCode = urlParams.get('join');
 
   const topBar = document.getElementById('top-bar');
   const songTitleEl = document.getElementById('song-title');
@@ -553,6 +583,12 @@
   const requestInfoListEl = document.getElementById('request-info-list');
   const requestInfoCloseBtn = document.getElementById('request-info-close-btn');
   const followerBadge = document.getElementById('follower-badge');
+  const followerLoginScreen = document.getElementById('follower-login-screen');
+  const followerLoginEmail = document.getElementById('follower-login-email');
+  const followerLoginPassword = document.getElementById('follower-login-password');
+  const followerLoginBtn = document.getElementById('follower-login-btn');
+  const followerLoginStatus = document.getElementById('follower-login-status');
+  const followerSignupLink = document.getElementById('follower-signup-link');
   const addSongBtn = document.getElementById('add-song-btn');
   const songSearchOverlay = document.getElementById('song-search-overlay');
   const songSearchInput = document.getElementById('song-search-input');
@@ -566,6 +602,7 @@
 
   let performer = null;
   let gig = null;
+  let gigOwnerPerformerId = null; // the Master's performer id — same as performer.id except for a joined-by-code Follower
   let orderedSongs = [];   // songs in gig.runtime_order, in order, minus any that no longer exist
   let pageStream = [];     // flat list: { song, pdf (proxy or null), pageNum, isFirstPageOfSong, isLastPageOfSong, loadError }
   let currentIndex = 0;
@@ -632,6 +669,28 @@
 
   exitBtn.addEventListener('click', exitToConsole);
 
+  followerLoginBtn.addEventListener('click', async () => {
+    const email = followerLoginEmail.value.trim();
+    const password = followerLoginPassword.value;
+    if (!email || !password) {
+      followerLoginStatus.textContent = 'Enter your email and password.';
+      followerLoginStatus.className = 'follower-login-status';
+      return;
+    }
+    followerLoginStatus.textContent = 'Logging in…';
+    followerLoginStatus.className = 'follower-login-status';
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
+      followerLoginStatus.textContent = error.message;
+      followerLoginStatus.className = 'follower-login-status';
+      return;
+    }
+    // Simplest correct way to pick the join flow back up with a real
+    // session in place — re-running init() in place would need untangling
+    // a lot of one-shot setup code that assumes it only ever runs once.
+    window.location.reload();
+  });
+
   window.restartSet = function () {
     atEnd = false;
     endScreen.classList.add('hidden');
@@ -641,7 +700,16 @@
   async function init() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
-      window.location.href = 'console.html';
+      if (joinCode) {
+        // A brand-new Follower joining via a shared link may not have an
+        // account yet — show an inline login (with a link to sign up, which
+        // returns here afterward) rather than bouncing to the Master-facing
+        // console.
+        followerSignupLink.href = `signup.html?join=${encodeURIComponent(joinCode)}&next=${encodeURIComponent(window.location.href)}`;
+        showOnly(followerLoginScreen);
+      } else {
+        window.location.href = 'console.html';
+      }
       return;
     }
 
@@ -656,25 +724,47 @@
       return;
     }
     performer = perf;
+    gigOwnerPerformerId = performer.id;
 
-    const { data: gigData } = await supabase
-      .from('gig_sessions')
-      .select('id, gig_code, runtime_order, active_setlist_id, status')
-      .eq('performer_id', performer.id)
-      .eq('status', 'active')
-      .order('created_at', { ascending: false })
-      .maybeSingle();
+    if (joinCode) {
+      // Master exclusivity, decided 2026-08-29: joining via a link/code
+      // always lands in Follower mode, no exceptions — even if the Master
+      // opens their own join link.
+      role = 'follower';
+      const { data: joinRows, error: joinError } = await supabase.rpc('join_gig_by_code', { p_gig_code: joinCode });
+      const joinRow = joinRows && joinRows[0];
+      if (joinError || !joinRow) {
+        loadingDetail.textContent = joinError ? joinError.message : 'That gig code is no longer active.';
+        return;
+      }
+      gigOwnerPerformerId = joinRow.performer_id;
+      gig = {
+        id: joinRow.gig_session_id,
+        gig_code: joinCode,
+        runtime_order: joinRow.runtime_order,
+        active_setlist_id: joinRow.active_setlist_id,
+        status: 'active'
+      };
+    } else {
+      const { data: gigData } = await supabase
+        .from('gig_sessions')
+        .select('id, gig_code, runtime_order, active_setlist_id, status')
+        .eq('performer_id', performer.id)
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .maybeSingle();
+      gig = gigData || null;
+    }
 
-    if (!gigData || !gigData.runtime_order || gigData.runtime_order.length === 0) {
+    if (!gig || !gig.runtime_order || gig.runtime_order.length === 0) {
       showOnly(noGigScreen);
       return;
     }
-    gig = gigData;
 
     const { data: songRows } = await supabase
       .from('songs')
       .select('id, title, artist, song_key, key_with_capo, chart_url')
-      .eq('performer_id', performer.id)
+      .eq('performer_id', gigOwnerPerformerId)
       .in('id', gig.runtime_order);
 
     const songById = {};
@@ -714,11 +804,13 @@
       // anything the Master accepted before this tablet joined), so only
       // genuinely new splices from this point forward get mirrored.
       followerBadge.classList.remove('hidden');
-      const { data: alreadySpliced } = await supabase
-        .from('requests')
-        .select('id')
-        .eq('gig_session_id', gig.id)
-        .not('spliced_at', 'is', null);
+      // Uses the same SECURITY DEFINER RPC as checkForFollowerSplices()
+      // below (see get_spliced_requests_for_gig in
+      // migration-follower-growth-and-autoend-v1.sql) rather than a direct
+      // table read, so this also works for a genuinely-distinct-account
+      // Follower joined via ?join=<code>, not just the legacy shared-login
+      // ?role=follower path.
+      const { data: alreadySpliced } = await supabase.rpc('get_spliced_requests_for_gig', { p_gig_session_id: gig.id });
       (alreadySpliced || []).forEach(r => processedSpliceIds.add(r.id));
 
       setupFollowerRealtime();
@@ -727,7 +819,7 @@
   }
 
   function showOnly(screenEl) {
-    [loadingScreen, noGigScreen, endScreen].forEach(el => el.classList.add('hidden'));
+    [loadingScreen, noGigScreen, endScreen, followerLoginScreen].forEach(el => el.classList.add('hidden'));
     screenEl.classList.remove('hidden');
   }
 
@@ -1416,12 +1508,7 @@
   async function checkForFollowerSplices() {
     if (!gig || role !== 'follower') return;
 
-    const { data, error } = await supabase
-      .from('requests')
-      .select('id, song_id, spliced_at, splice_after_song_id, splice_after_page_num, tip_amount, note, is_manual')
-      .eq('gig_session_id', gig.id)
-      .not('spliced_at', 'is', null)
-      .order('spliced_at', { ascending: true });
+    const { data, error } = await supabase.rpc('get_spliced_requests_for_gig', { p_gig_session_id: gig.id });
 
     if (error || !data) return;
     const newRows = data.filter(r => !processedSpliceIds.has(r.id));

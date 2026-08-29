@@ -168,6 +168,19 @@
     promoInput.value = refCode;
   }
 
+  // Follower-growth join passthrough (item 22, decided 2026-08-29): a
+  // Follower's join link is viewer.html?join=<code>, which redirects here
+  // (with ?next=<that same URL>) when they have no session yet. Only ever
+  // trusts a same-origin `next` — never redirects to an arbitrary URL a
+  // crafted link could supply. Falls back to reconstructing the viewer join
+  // URL from `join` alone, so a bare signup.html?join=<code> link (no
+  // `next`) still lands back in the right place after signing up.
+  const nextParamRaw = urlParams.get('next');
+  const joinCodeParam = urlParams.get('join');
+  const safeNext = (nextParamRaw && nextParamRaw.startsWith(window.location.origin))
+    ? nextParamRaw
+    : (joinCodeParam ? `viewer.html?join=${encodeURIComponent(joinCodeParam)}` : null);
+
   let handleValid = false;
   let handleCheckTimer = null;
 
@@ -311,10 +324,27 @@
     // handle_new_performer_signup trigger — see migration-signup-v1.sql),
     // so once they're actually logged in, console.html will find it.
     if (data.session) {
-      successMessage.textContent = `You're all set! Your page is bribetheband.live/${handle}. Redirecting you to the console…`;
-      setTimeout(() => { window.location.href = 'console.html'; }, 2500);
+      const dest = safeNext || 'console.html';
+      successMessage.textContent = `You're all set! Your page is bribetheband.live/${handle}. Redirecting you…`;
+      setTimeout(() => { window.location.href = dest; }, 2500);
     } else {
-      successMessage.textContent = `Almost there — check your email to confirm your account, then log into the console. Your page will be bribetheband.live/${handle}.`;
+      // No session yet (email confirmation is required on this project) —
+      // build the follow-up message via DOM APIs, not innerHTML, since
+      // `safeNext` (though same-origin-checked) is still attacker-influenced
+      // query-string input.
+      successMessage.textContent = '';
+      successMessage.appendChild(document.createTextNode(
+        `Almost there — check your email to confirm your account. Your page will be bribetheband.live/${handle}. `
+      ));
+      if (safeNext) {
+        const a = document.createElement('a');
+        a.href = safeNext;
+        a.textContent = 'Then come back here to join.';
+        a.style.color = 'var(--accent)';
+        successMessage.appendChild(a);
+      } else {
+        successMessage.appendChild(document.createTextNode('Then log into the console.'));
+      }
     }
   });
 </script>

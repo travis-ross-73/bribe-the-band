@@ -392,6 +392,7 @@
   // live queue and boost totals, and it's a single lightweight aggregate
   // query either way (see get_song_request_status in migration-queue-cooldown-v1.sql).
   const CAP_POLL_MS = 8000;
+  let capPollTimer = null;
 
   // Payment Element state — a fresh PaymentIntent + Element is created
   // whenever the selected tip amount changes (simplest correct approach;
@@ -498,7 +499,7 @@
     songs = songData;
     statusBanner.classList.add('hidden');
     await refreshCapStatus(); // renders the song list, queue strip, and cooldown section
-    setInterval(refreshCapStatus, CAP_POLL_MS);
+    capPollTimer = setInterval(refreshCapStatus, CAP_POLL_MS);
   }
 
   // Recomputes the effective performer name from whatever's currently in
@@ -520,15 +521,38 @@
   async function refreshCapStatus() {
     if (!gigSession) return;
 
-    // Re-check the display-name override every poll too — Travis can change
-    // it live from the console while a crowd member already has this page
-    // open, and there's no other signal telling this page to refresh it.
+    // Piggyback the 12-hour-zero-activity auto-end check onto this same
+    // poll (decided 2026-08-27, see migration-follower-growth-and-autoend-v1.sql)
+    // — a gig with no new requests for 12 hours ends itself, so a performer
+    // who never manually starts a new gig doesn't silently accumulate an
+    // unbounded request-cap count / runtime_order forever.
+    await supabase.rpc('check_and_end_stale_gig', { p_gig_session_id: gigSession.id });
+
+    // Re-check the display-name override (and now, gig status) every poll
+    // too — Travis can change the name live, or the gig can auto-end, while
+    // a crowd member already has this page open, and there's no other
+    // signal telling this page to refresh either one.
     const { data: gigRow } = await supabase
       .from('gig_sessions')
-      .select('display_name_override')
+      .select('display_name_override, status')
       .eq('id', gigSession.id)
       .maybeSingle();
-    if (gigRow && gigRow.display_name_override !== gigSession.display_name_override) {
+
+    if (!gigRow || gigRow.status !== 'active') {
+      statusBanner.textContent = 'No active gig right now — check back when the show starts!';
+      statusBanner.classList.remove('hidden');
+      tipOnlyCard.classList.add('hidden');
+      songListEl.innerHTML = '';
+      cappedSongIds = new Set();
+      queueBySong = new Map();
+      cooldownBySong = new Map();
+      renderQueue();
+      renderCooldown();
+      clearInterval(capPollTimer);
+      return;
+    }
+
+    if (gigRow.display_name_override !== gigSession.display_name_override) {
       gigSession.display_name_override = gigRow.display_name_override;
       applyPerformerName();
     }
