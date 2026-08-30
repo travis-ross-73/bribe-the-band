@@ -84,9 +84,15 @@
     margin-bottom: 18px;
     text-align: center;
   }
-  #no-gig-card p { margin: 0 0 6px; }
-  #no-gig-headline { font-weight: 700; font-size: 1.05rem; color: var(--text); }
-  #no-gig-subtext { color: var(--muted); font-size: 0.9rem; margin-bottom: 0; }
+  #no-gig-card p { margin: 0 0 8px; }
+  #no-gig-headline {
+    font-weight: 700;
+    font-size: 0.78rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  #no-gig-subtext { color: var(--text); font-size: 0.95rem; line-height: 1.5; margin-bottom: 0; }
   #search {
     width: 100%;
     padding: 12px 14px;
@@ -313,8 +319,8 @@
   </div>
 
   <div id="no-gig-card" class="hidden">
-    <p id="no-gig-headline">🎵 No show right now</p>
-    <p id="no-gig-subtext">Check back soon for the next gig — here's what's in the set list.</p>
+    <p id="no-gig-headline">Offstage — For Now</p>
+    <p id="no-gig-subtext">No show happening right this second, but here's everything I play live. Check back for upcoming dates — or catch a set and request one of these in real time.</p>
     <!-- Future: a list of upcoming gig dates, and links to the band's
          social accounts to follow for announcements, once those features
          are built (see docs/04-DECISIONS-AND-OPEN-QUESTIONS.md). -->
@@ -427,6 +433,7 @@
   const tipOnlyText = document.getElementById('tip-only-text');
   const tipOnlyBtn = document.getElementById('tip-only-btn');
   const noGigCard = document.getElementById('no-gig-card');
+  const noGigSubtext = document.getElementById('no-gig-subtext');
   const queueSectionEl = document.getElementById('queue-section');
   const songListHeading = document.getElementById('song-list-heading');
   const songListEl = document.getElementById('song-list');
@@ -596,9 +603,12 @@
       || performerAccountName
       || 'the band';
     tipOnlyText.textContent = `Like what you've heard from ${performerName} so far? Leave a tip!`;
-    songListHeading.textContent = noGigMode
-      ? `🎶 ${performerName}'s song list`
-      : `Here's a list of curated songs that ${performerName} has selected for you to request.`;
+    if (noGigMode) {
+      songListHeading.textContent = 'Browse the Songbook';
+      noGigSubtext.textContent = `No show happening right this second, but here's everything ${performerName} plays live. Check back for upcoming dates — or catch a set and request one of these in real time.`;
+    } else {
+      songListHeading.textContent = `Here's a list of curated songs that ${performerName} has selected for you to request.`;
+    }
   }
 
   // Asks the DB (via a SECURITY DEFINER function, since anon users can't
