@@ -391,6 +391,30 @@
     color: var(--text);
     font-weight: 400;
   }
+  /* End-of-set: floating card, not a full-screen blocker. Swiping back to
+     replay a song, or (for the Master) tapping to bring the header back up
+     for "+ Add a Song" as an encore, both need to keep working here — the
+     chart underneath stays exactly where it was, so pointer-events:none on
+     the outer wrapper lets taps/swipes on the empty space around the card
+     reach #stage's own navigation handler untouched. Only the card itself
+     (and its buttons) actually catches clicks. The card also needs its own
+     opaque background — previously this whole screen had none at all, so
+     its text sat unreadably on top of whatever chart page was already
+     rendered (often a plain white PDF page). */
+  #end-screen { pointer-events: none; }
+  .end-screen-card {
+    pointer-events: auto;
+    background: var(--card);
+    border: 1px solid #2a2e40;
+    border-radius: 16px;
+    padding: 24px 28px;
+    max-width: 420px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+  }
   .follower-login-input {
     width: 100%;
     max-width: 320px;
@@ -462,10 +486,12 @@
     </div>
 
     <div class="full-screen-message hidden" id="end-screen">
-      <h2>🎉 End of the set</h2>
-      <p id="end-screen-detail">You've swiped through everything in tonight's set.</p>
-      <button onclick="restartSet()">Start Over From the Top</button>
-      <button class="secondary" onclick="window.location.href='console.html'">Back to Console</button>
+      <div class="end-screen-card">
+        <h2>🎉 End of the set</h2>
+        <p id="end-screen-detail">You've swiped through everything in tonight's set.</p>
+        <button onclick="restartSet()">Start Over From the Top</button>
+        <button class="secondary" onclick="window.location.href='console.html'">Back to Console</button>
+      </div>
     </div>
   </div>
 
@@ -566,6 +592,7 @@
   const loadingDetail = document.getElementById('loading-detail');
   const noGigScreen = document.getElementById('no-gig-screen');
   const endScreen = document.getElementById('end-screen');
+  const endScreenDetail = document.getElementById('end-screen-detail');
   const progressFooter = document.getElementById('progress-footer');
   const songIndexEl = document.getElementById('song-index');
   const songCountEl = document.getElementById('song-count');
@@ -1631,8 +1658,19 @@
 
     if (newIndex >= pageStream.length) {
       atEnd = true;
+      endScreenDetail.textContent = role === 'master'
+        ? "You've swiped through everything in tonight's set. Swipe back anytime to replay a song, or tap the screen and use \"+ Add a Song\" up top for an encore."
+        : "You've swiped through everything in tonight's set. Swipe back anytime to replay a song.";
       showOnly(endScreen);
       return;
+    }
+
+    // Landing on a real page — including swiping back from the end screen,
+    // or a newly-spliced encore extending the set past where "the end"
+    // used to be — always means we're not at the end anymore.
+    if (atEnd) {
+      atEnd = false;
+      endScreen.classList.add('hidden');
     }
 
     currentIndex = newIndex;
@@ -1640,12 +1678,13 @@
   }
 
   function nextPage() {
-    if (atEnd) return;
     goToIndex(currentIndex + 1);
   }
   function prevPage() {
-    if (atEnd) return;
-    goToIndex(currentIndex - 1);
+    // atEnd never advanced currentIndex past the last real page (see
+    // goToIndex above), so "back" from the end screen means redisplaying
+    // that same last page, not currentIndex - 1 (which would skip it).
+    goToIndex(atEnd ? currentIndex : currentIndex - 1);
   }
 
   // Unified pointer handling for the whole stage, branching on pointerType:
@@ -1670,7 +1709,11 @@
   });
 
   stageEl.addEventListener('pointerup', (e) => {
-    if (!viewerReady || atEnd) return;
+    // Deliberately NOT gated on atEnd — the end-of-set card floats over the
+    // last chart page without blocking it (see #end-screen's pointer-events
+    // in the stylesheet), so swiping/tapping the chart itself needs to keep
+    // working exactly like it does on any other page.
+    if (!viewerReady) return;
 
     const dx = e.clientX - pointerStartX;
     const dy = e.clientY - pointerStartY;
