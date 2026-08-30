@@ -76,6 +76,17 @@
     font-size: 0.95rem;
     cursor: pointer;
   }
+  #no-gig-card {
+    background: var(--card);
+    border: 1px solid #2a2e40;
+    border-radius: 12px;
+    padding: 18px 16px;
+    margin-bottom: 18px;
+    text-align: center;
+  }
+  #no-gig-card p { margin: 0 0 6px; }
+  #no-gig-headline { font-weight: 700; font-size: 1.05rem; color: var(--text); }
+  #no-gig-subtext { color: var(--muted); font-size: 0.9rem; margin-bottom: 0; }
   #search {
     width: 100%;
     padding: 12px 14px;
@@ -301,6 +312,14 @@
     <button id="tip-only-btn">Support Local Music</button>
   </div>
 
+  <div id="no-gig-card" class="hidden">
+    <p id="no-gig-headline">🎵 No show right now</p>
+    <p id="no-gig-subtext">Check back soon for the next gig — here's what's in the set list.</p>
+    <!-- Future: a list of upcoming gig dates, and links to the band's
+         social accounts to follow for announcements, once those features
+         are built (see docs/04-DECISIONS-AND-OPEN-QUESTIONS.md). -->
+  </div>
+
   <div id="queue-section">
     <h2 class="section-heading">🔥 Requested Songs In Queue</h2>
     <div id="queue-list"></div>
@@ -382,6 +401,7 @@
   let songs = [];
   let gigSession = null;
   let performerAccountName = null; // fetched once at init — the account-level display_name
+  let noGigMode = false; // true when there's no active gig — browse-only song list, no request/tip capability
   let selectedSong = null; // null when this is a tip-only request
   let selectedTip = null;  // number, or 'custom'
   let isTipOnly = false;
@@ -406,6 +426,8 @@
   const tipOnlyCard = document.getElementById('tip-only-card');
   const tipOnlyText = document.getElementById('tip-only-text');
   const tipOnlyBtn = document.getElementById('tip-only-btn');
+  const noGigCard = document.getElementById('no-gig-card');
+  const queueSectionEl = document.getElementById('queue-section');
   const songListHeading = document.getElementById('song-list-heading');
   const songListEl = document.getElementById('song-list');
   const queueListEl = document.getElementById('queue-list');
@@ -435,6 +457,7 @@
   const mainEl = document.querySelector('main');
 
   async function init() {
+    let performerId = null;
     let gigQuery = supabase
       .from('gig_sessions')
       .select('id, gig_code, status, performer_id, display_name_override')
@@ -447,7 +470,7 @@
       // Default, static-URL behavior: whichever gig is active for this performer
       const { data: performerData } = await supabase
         .from('performers')
-        .select('id')
+        .select('id, display_name')
         .eq('handle', PERFORMER_HANDLE)
         .maybeSingle();
       if (!performerData) {
@@ -455,14 +478,24 @@
         tipOnlyCard.classList.add('hidden');
         return;
       }
-      gigQuery = gigQuery.eq('performer_id', performerData.id).order('created_at', { ascending: false });
+      performerId = performerData.id;
+      performerAccountName = performerData.display_name;
+      gigQuery = gigQuery.eq('performer_id', performerId).order('created_at', { ascending: false });
     }
 
     const { data: gigData, error: gigError } = await gigQuery.limit(1).maybeSingle();
 
     if (gigError || !gigData) {
-      statusBanner.textContent = 'No active gig right now — check back when the show starts!';
-      tipOnlyCard.classList.add('hidden');
+      if (gigCodeOverride) {
+        // Testing a specific gig code that isn't live — this path is only
+        // ever hit deliberately while testing, not from the real static
+        // audience URL, so it keeps the old simple message rather than the
+        // full no-gig browse experience below.
+        statusBanner.textContent = 'No active gig right now — check back when the show starts!';
+        tipOnlyCard.classList.add('hidden');
+        return;
+      }
+      await initNoGigMode(performerId);
       return;
     }
     gigSession = gigData;
@@ -475,12 +508,17 @@
     // mid-show, so it's only fetched once here — but the override is
     // re-checked on every refreshCapStatus() poll below, since Travis can
     // change it live from the console while this page is already open.
-    const { data: performerNameData } = await supabase
-      .from('performers')
-      .select('display_name')
-      .eq('id', gigSession.performer_id)
-      .maybeSingle();
-    performerAccountName = performerNameData && performerNameData.display_name;
+    // Already fetched above in the normal (non-override) path; the ?gig=
+    // testing override skips that lookup entirely, so fetch it here instead
+    // in that one case.
+    if (!performerId) {
+      const { data: performerNameData } = await supabase
+        .from('performers')
+        .select('display_name')
+        .eq('id', gigSession.performer_id)
+        .maybeSingle();
+      performerAccountName = performerNameData && performerNameData.display_name;
+    }
     applyPerformerName();
 
     const { data: songData, error: songError } = await supabase
@@ -502,15 +540,65 @@
     capPollTimer = setInterval(refreshCapStatus, CAP_POLL_MS);
   }
 
+  // No active gig right now — instead of the old bare "check back later"
+  // message, show a placeholder card plus the full (browse-only) song
+  // catalog, so a fan who taps the link between shows still finds
+  // something real: what the band plays. No request/tip capability here —
+  // every request row in this app is scoped to an active gig session (caps,
+  // cooldowns, the live queue), so there's nothing meaningful to enforce
+  // that against without one; keeping this browse-only avoids a much bigger
+  // "requests waiting for the next gig" feature that was never decided.
+  async function initNoGigMode(performerId) {
+    if (!performerId) {
+      // Could not resolve a performer at all (shouldn't normally happen —
+      // the caller already checked this — but stay safe rather than show a
+      // browse experience with no songs behind it).
+      statusBanner.textContent = 'No active gig right now — check back when the show starts!';
+      tipOnlyCard.classList.add('hidden');
+      return;
+    }
+
+    const { data: songData, error: songError } = await supabase
+      .from('songs')
+      .select('id, title, artist, song_key, key_with_capo, chart_url')
+      .eq('performer_id', performerId)
+      .eq('is_hidden', false)
+      .order('title');
+
+    if (songError) {
+      statusBanner.textContent = 'Could not load songs. Please try again.';
+      console.error(songError);
+      return;
+    }
+
+    noGigMode = true;
+    songs = songData || [];
+
+    statusBanner.classList.add('hidden');
+    tipOnlyCard.classList.add('hidden');
+    queueSectionEl.classList.add('hidden');
+    cooldownSection.classList.add('hidden');
+    noGigCard.classList.remove('hidden');
+
+    applyPerformerName();
+    renderSongs(songs);
+  }
+
   // Recomputes the effective performer name from whatever's currently in
   // gigSession.display_name_override (kept up to date by refreshCapStatus
-  // below) and applies it to the tip prompt and song-list heading.
+  // below) and applies it to the tip prompt and song-list heading. Null-safe
+  // on gigSession since noGigMode calls this with no active gig at all —
+  // there's no per-gig override to consider in that case, just the account
+  // name, and the heading reads as a browsable catalog rather than a
+  // request prompt.
   function applyPerformerName() {
-    const performerName = (gigSession.display_name_override && gigSession.display_name_override.trim())
+    const performerName = (gigSession && gigSession.display_name_override && gigSession.display_name_override.trim())
       || performerAccountName
       || 'the band';
     tipOnlyText.textContent = `Like what you've heard from ${performerName} so far? Leave a tip!`;
-    songListHeading.textContent = `Here's a list of curated songs that ${performerName} has selected for you to request.`;
+    songListHeading.textContent = noGigMode
+      ? `🎶 ${performerName}'s song list`
+      : `Here's a list of curated songs that ${performerName} has selected for you to request.`;
   }
 
   // Asks the DB (via a SECURITY DEFINER function, since anon users can't
@@ -539,16 +627,16 @@
       .maybeSingle();
 
     if (!gigRow || gigRow.status !== 'active') {
-      statusBanner.textContent = 'No active gig right now — check back when the show starts!';
-      statusBanner.classList.remove('hidden');
-      tipOnlyCard.classList.add('hidden');
-      songListEl.innerHTML = '';
+      // The gig ended (explicitly, or the 12-hour auto-end) while this page
+      // was already open — drop straight into the same browse-only
+      // experience a fresh visitor gets, rather than just going blank.
+      clearInterval(capPollTimer);
       cappedSongIds = new Set();
       queueBySong = new Map();
       cooldownBySong = new Map();
-      renderQueue();
-      renderCooldown();
-      clearInterval(capPollTimer);
+      const endedPerformerId = gigSession.performer_id;
+      gigSession = null;
+      await initNoGigMode(endedPerformerId);
       return;
     }
 
@@ -681,11 +769,30 @@
   function renderSongs(list) {
     songListEl.innerHTML = '';
     if (list.length === 0) {
-      songListEl.innerHTML = '<div style="color:var(--muted); text-align:center; padding:20px;">No songs match your search.</div>';
+      const msg = songs.length === 0 ? 'No songs listed yet.' : 'No songs match your search.';
+      songListEl.innerHTML = `<div style="color:var(--muted); text-align:center; padding:20px;">${msg}</div>`;
       return;
     }
     for (const song of list) {
       const row = document.createElement('div');
+
+      if (noGigMode) {
+        // Browse-only — no cap/cooldown/queue state exists without an
+        // active gig session, so this is purely informational. Reuses the
+        // existing "capped" visual treatment (dimmed, no hover) since it
+        // already means exactly "not clickable right now."
+        row.className = 'song-row capped';
+        row.innerHTML = `
+          <div>
+            <div class="song-title">${escapeHtml(song.title)}</div>
+            <div class="song-artist">${escapeHtml(song.artist)}</div>
+          </div>
+          <div class="req-arrow"></div>
+        `;
+        songListEl.appendChild(row);
+        continue;
+      }
+
       const inCooldown = cooldownBySong.has(song.id);
       const inQueue = queueBySong.has(song.id) && !inCooldown;
       // is_capped from the RPC is never true for an in-queue song (see
