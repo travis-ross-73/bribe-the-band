@@ -47,6 +47,7 @@ All 10 original project docs (from the claude.ai Project "Song Request and Tip A
 - `05-SIGNUP-SCOPE.md` — self-service signup Phase 1 (built, not yet deployed)
 - `06-OWNERS-GUIDE-NOTES.md` — outline for an eventual "how Travis runs the business" ops manual (not written yet)
 - `07-STAGING-ENVIRONMENT-SETUP.md` — the staging build currently in progress (see above)
+- `08-PERFORMER-FAQ-TUTORIAL-NOTES.md` — running list of customer-facing FAQ/tutorial topics to write later (not started)
 - `2-hour-setlist.md` — a sample setlist built from the approved song database
 - `gig-request-prototype.html` — the very first single-file prototype, superseded, kept only as a UX reference
 
