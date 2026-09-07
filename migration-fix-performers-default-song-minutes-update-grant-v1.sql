@@ -1,0 +1,15 @@
+-- Bribe The Band — follow-up to migration-fix-performers-default-song-minutes-grant-v1.sql
+-- (which fixed SELECT). Found immediately after, hands-on testing the
+-- Last Call panel's Save button on staging: the console's "Save for
+-- Tonight" reported success and gig_sessions saved correctly, but
+-- performers.default_song_minutes silently never actually changed.
+--
+-- Root cause: the same column-level-grants doctrine, but for UPDATE this
+-- time -- the write itself is rejected by Postgres, and (with PostgREST's
+-- default minimal-return preference, no .select() chained after .update())
+-- that rejection doesn't surface as a request-level error the way SELECT's
+-- did. Confirmed directly: an update().select() combo throws 42501; a bare
+-- update() reports 204/success while the row is provably unchanged.
+--
+-- Run on STAGING (Supabase SQL Editor).
+grant update (default_song_minutes) on performers to authenticated;
