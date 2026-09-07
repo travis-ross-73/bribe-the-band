@@ -235,6 +235,7 @@
   .drawer-row .title .key { color: var(--muted); font-weight: 400; }
   .drawer-row .note { color: var(--muted); font-size: 0.82rem; margin-top: 3px; }
   .drawer-row .note a { color: var(--accent); }
+  .drawer-row .late-request-note { color: var(--accent); font-weight: 600; }
   .drawer-row .tip { color: var(--accent); font-weight: 700; font-size: 0.85rem; white-space: nowrap; margin-left: 8px; }
   .drawer-row .actions { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
   .drawer-row .actions button {
@@ -449,6 +450,7 @@
       <div class="sub" id="song-sub">—</div>
     </div>
     <div class="right">
+      <div class="play-badge hidden" id="cutoff-badge">⏰ Last Call</div>
       <div class="play-badge hidden" id="follower-badge">👥 Following</div>
       <div class="play-badge hidden" id="play-badge">played 0x tonight</div>
       <button id="add-song-btn" class="hidden">🔍 Add Song</button>
@@ -581,6 +583,7 @@
   const songTitleEl = document.getElementById('song-title');
   const songSubEl = document.getElementById('song-sub');
   const playBadge = document.getElementById('play-badge');
+  const cutoffBadge = document.getElementById('cutoff-badge');
   const exitBtn = document.getElementById('exit-btn');
   const fullscreenBtn = document.getElementById('fullscreen-btn');
   const canvas = document.getElementById('page-canvas');
@@ -639,6 +642,12 @@
   let chromeHideTimer = null;
   const CHROME_AUTO_HIDE_MS = 3000;
   let pendingRequests = [];       // requests with status 'pending' for tonight's gig
+  // Last Call (item 29): polled independently by both Master and Follower on
+  // their own existing poll cadences (no new realtime channel) — a shared
+  // read via get_request_cutoff_status(), which is anon/authenticated-
+  // callable and needs no gig-ownership check, so it works the same for a
+  // genuinely distinct-account Follower as it does for the Master.
+  let cutoffState = { cutoff_enabled: false };
   let drawerOpen = false;
   let activeRequestInfoEntry = null; // the entry currently shown in the "was requested" box, so the close button knows what to mark played
   let requestPollTimer = null;
@@ -840,6 +849,7 @@
       const { data: alreadySpliced } = await supabase.rpc('get_spliced_requests_for_gig', { p_gig_session_id: gig.id });
       (alreadySpliced || []).forEach(r => processedSpliceIds.add(r.id));
 
+      await refreshCutoffStatus();
       setupFollowerRealtime();
       followerSyncTimer = setInterval(checkForFollowerSplices, FOLLOWER_SYNC_POLL_MS);
     }
@@ -1111,8 +1121,29 @@
     return map;
   }
 
+  // Best-effort, same as request.html's own Last Call fetch: a failure here
+  // never blocks the rest of whichever poll called it (request drawer /
+  // Follower splice-sync both keep working exactly as before).
+  async function refreshCutoffStatus() {
+    if (!gig) return;
+    try {
+      const { data, error } = await supabase.rpc('get_request_cutoff_status', { p_gig_session_id: gig.id });
+      cutoffState = (!error && data && data[0]) || { cutoff_enabled: false };
+    } catch (err) {
+      console.error('Could not load Last Call status', err);
+      cutoffState = { cutoff_enabled: false };
+    }
+    cutoffBadge.classList.toggle('hidden', !(cutoffState.cutoff_enabled && (cutoffState.is_last_call || cutoffState.is_cutoff_reached)));
+    if (cutoffState.is_cutoff_reached) {
+      cutoffBadge.textContent = '🔒 Requests Closed';
+    } else if (cutoffState.is_last_call) {
+      cutoffBadge.textContent = '⏰ Last Call';
+    }
+  }
+
   async function refreshPendingRequests() {
     if (!gig) return;
+    await refreshCutoffStatus();
     const { data, error } = await supabase
       .from('requests')
       .select('id, song_id, tip_amount, note, created_at')
@@ -1163,12 +1194,21 @@
         ? `<button class="accept-btn" data-accept="${r.id}">Accept</button>
            <button class="decline-btn" data-decline="${r.id}">Decline</button>`
         : `<button class="ack-btn" data-ack="${r.id}">Got it</button>`;
+      // Last Call (item 29): flagged, never auto-declined — the point is to
+      // let the Master triage a late arrival by hand, not to hide or reject
+      // it. cutoff_reached_at is only ever set once cutoff first fires, so
+      // this is false for every request on a gig with Last Call off.
+      const arrivedAfterCutoff = !!cutoffState.cutoff_reached_at && new Date(r.created_at) > new Date(cutoffState.cutoff_reached_at);
+      const lateNoteHtml = arrivedAfterCutoff
+        ? '<div class="note late-request-note">⏰ Came in after requests closed</div>'
+        : '';
       return `
         <div class="drawer-row" data-request-row="${r.id}">
           <div class="info">
             <div class="title">${escapeHtml(title)}${keyLabel ? ` <span class="key">(${escapeHtml(keyLabel)})</span>` : ''}</div>
             ${r.note ? `<div class="note">${escapeHtml(r.note)}</div>` : ''}
             ${song && song.chart_url ? `<div class="note"><a href="${song.chart_url}" target="_blank" rel="noopener">Open chart</a></div>` : ''}
+            ${lateNoteHtml}
           </div>
           <div class="tip">${tipLabel}</div>
           <div class="actions">${actionsHtml}</div>
@@ -1534,6 +1574,7 @@
 
   async function checkForFollowerSplices() {
     if (!gig || role !== 'follower') return;
+    await refreshCutoffStatus();
 
     const { data, error } = await supabase.rpc('get_spliced_requests_for_gig', { p_gig_session_id: gig.id });
 

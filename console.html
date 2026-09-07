@@ -672,6 +672,43 @@
         </div>
         <div class="manage-song-status" id="gig-caps-status"></div>
       </div>
+
+      <div id="last-call-panel" class="hidden">
+        <h3>Last Call (Optional)</h3>
+        <div class="section-sub">Automatically slows down and eventually closes new song requests as tonight's set runs out of time to actually play them. Leave "Show wraps at" blank to leave this off entirely — nothing changes for tonight's gig without it.</div>
+        <div class="gig-cap-row">
+          <div>
+            <div class="gig-cap-title">Show wraps at</div>
+            <div class="gig-cap-artist">The end of your <em>last</em> set tonight — not a break between sets. Requests keep coming in right through any set break either way.</div>
+          </div>
+          <input type="datetime-local" id="gig-set-ends-at-input" />
+        </div>
+        <div class="gig-cap-row">
+          <div>
+            <div class="gig-cap-title">Sets tonight</div>
+            <div class="gig-cap-artist">Just for your own reference right now — requests never pause between sets regardless of this number.</div>
+          </div>
+          <input type="number" min="1" step="1" id="gig-total-sets-input" placeholder="1" />
+        </div>
+        <div class="gig-cap-row">
+          <div>
+            <div class="gig-cap-title">Buffer (minutes)</div>
+            <div class="gig-cap-artist">Safety margin before the hard cutoff, and how far ahead the soft "Last Call" warning shows up on the crowd page.</div>
+          </div>
+          <input type="number" min="1" step="1" id="gig-request-buffer-input" placeholder="10" />
+        </div>
+        <div class="gig-cap-row">
+          <div>
+            <div class="gig-cap-title">Default minutes per song</div>
+            <div class="gig-cap-artist">Applies to your whole account, not just tonight — used whenever a song in Song Library has no estimated-minutes override of its own.</div>
+          </div>
+          <input type="number" min="1" step="0.5" id="default-song-minutes-input" placeholder="4" />
+        </div>
+        <div class="button-row">
+          <button class="secondary" id="save-last-call-btn">Save for Tonight</button>
+        </div>
+        <div class="manage-song-status" id="last-call-status"></div>
+      </div>
     </section>
 
     <section>
@@ -733,6 +770,7 @@
       <input type="text" id="new-song-artist" placeholder="Artist" />
       <input type="text" id="new-song-key" placeholder="Key, e.g. 'G'" />
       <input type="text" id="new-song-capo" placeholder="Key with capo (optional), e.g. 'Capo 3 (play D shapes)'" />
+      <input type="number" id="new-song-minutes" min="1" step="0.5" placeholder="Estimated minutes (optional — used by Last Call)" />
       <div class="file-upload-row">
         <input type="file" id="new-song-file" accept="application/pdf" />
       </div>
@@ -870,6 +908,13 @@
   const saveGigCapsBtn = document.getElementById('save-gig-caps-btn');
   const resetGigCapsBtn = document.getElementById('reset-gig-caps-btn');
   const gigCapsStatus = document.getElementById('gig-caps-status');
+  const lastCallPanel = document.getElementById('last-call-panel');
+  const gigSetEndsAtInput = document.getElementById('gig-set-ends-at-input');
+  const gigTotalSetsInput = document.getElementById('gig-total-sets-input');
+  const gigRequestBufferInput = document.getElementById('gig-request-buffer-input');
+  const defaultSongMinutesInput = document.getElementById('default-song-minutes-input');
+  const saveLastCallBtn = document.getElementById('save-last-call-btn');
+  const lastCallStatus = document.getElementById('last-call-status');
 
   const editingBanner = document.getElementById('editing-banner');
   const newSetlistName = document.getElementById('new-setlist-name');
@@ -888,6 +933,7 @@
   const newSongArtist = document.getElementById('new-song-artist');
   const newSongKey = document.getElementById('new-song-key');
   const newSongCapo = document.getElementById('new-song-capo');
+  const newSongMinutes = document.getElementById('new-song-minutes');
   const newSongFile = document.getElementById('new-song-file');
   const newSongUrl = document.getElementById('new-song-url');
   const addSongBtn = document.getElementById('add-song-btn');
@@ -949,7 +995,7 @@
 
     const { data: perf, error: perfError } = await supabase
       .from('performers')
-      .select('id, handle, display_name')
+      .select('id, handle, display_name, default_song_minutes')
       .eq('auth_user_id', user.id)
       .maybeSingle();
 
@@ -993,7 +1039,7 @@
   async function loadSongs() {
     const { data } = await supabase
       .from('songs')
-      .select('id, title, artist, chart_url, song_key, key_with_capo, is_hidden')
+      .select('id, title, artist, chart_url, song_key, key_with_capo, is_hidden, estimated_minutes')
       .eq('performer_id', performer.id)
       .order('title');
     songs = data || [];
@@ -1025,7 +1071,7 @@
 
     const { data } = await supabase
       .from('gig_sessions')
-      .select('id, gig_code, active_setlist_id, runtime_order, request_cap, cap_reset_at, cooldown_minutes, display_name_override, status, created_at')
+      .select('id, gig_code, active_setlist_id, runtime_order, request_cap, cap_reset_at, cooldown_minutes, display_name_override, status, created_at, set_ends_at, request_buffer_minutes, total_sets')
       .eq('performer_id', performer.id)
       .eq('status', 'active')
       .order('created_at', { ascending: false })
@@ -1117,6 +1163,7 @@
       startGigBtn.classList.add('primary');
     }
     renderGigCapsPanel();
+    renderLastCallPanel();
   }
 
   // ---------------- Persistent crowd-page link ----------------
@@ -1205,6 +1252,69 @@
     activeGig.cap_reset_at = nowIso;
     gigCapsStatus.textContent = 'Request counts reset for tonight.';
     gigCapsStatus.className = 'manage-song-status ok';
+  });
+
+  // ---------------- Last Call: dynamic request cutoff (item 29) ----------------
+  // set_ends_at/request_buffer_minutes/total_sets are per-gig (gig_sessions),
+  // same optional/carries-forward pattern as the cap and cooldown above.
+  // default_song_minutes is per-performer (not per-gig) — there's no
+  // dedicated account-settings screen yet, so it lives here since this is
+  // the only place it's actually relevant today.
+  function toDatetimeLocalValue(isoString) {
+    if (!isoString) return '';
+    const d = new Date(isoString);
+    if (isNaN(d.getTime())) return '';
+    const pad = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  function renderLastCallPanel() {
+    if (!activeGig) {
+      lastCallPanel.classList.add('hidden');
+      return;
+    }
+    lastCallPanel.classList.remove('hidden');
+    lastCallStatus.textContent = '';
+    gigSetEndsAtInput.value = toDatetimeLocalValue(activeGig.set_ends_at);
+    gigTotalSetsInput.value = activeGig.total_sets ?? '';
+    gigRequestBufferInput.value = activeGig.request_buffer_minutes ?? '';
+    defaultSongMinutesInput.value = performer.default_song_minutes ?? '';
+  }
+
+  saveLastCallBtn.addEventListener('click', async () => {
+    if (!activeGig) return;
+    const rawSetEndsAt = gigSetEndsAtInput.value;
+    const newSetEndsAt = rawSetEndsAt ? new Date(rawSetEndsAt).toISOString() : null;
+    const rawTotalSets = gigTotalSetsInput.value.trim();
+    const newTotalSets = rawTotalSets ? parseInt(rawTotalSets, 10) : null;
+    const rawBuffer = gigRequestBufferInput.value.trim();
+    const newBuffer = rawBuffer ? parseInt(rawBuffer, 10) : null;
+    const rawDefaultMinutes = defaultSongMinutesInput.value.trim();
+    const newDefaultMinutes = rawDefaultMinutes ? parseFloat(rawDefaultMinutes) : null;
+
+    lastCallStatus.textContent = 'Saving…';
+    lastCallStatus.className = 'manage-song-status';
+
+    const [gigResult, performerResult] = await Promise.all([
+      supabase.from('gig_sessions').update({
+        set_ends_at: newSetEndsAt,
+        total_sets: newTotalSets,
+        request_buffer_minutes: newBuffer
+      }).eq('id', activeGig.id),
+      supabase.from('performers').update({ default_song_minutes: newDefaultMinutes }).eq('id', performer.id)
+    ]);
+
+    if (gigResult.error || performerResult.error) {
+      lastCallStatus.textContent = 'Could not save: ' + (gigResult.error || performerResult.error).message;
+      lastCallStatus.className = 'manage-song-status err';
+      return;
+    }
+    activeGig.set_ends_at = newSetEndsAt;
+    activeGig.total_sets = newTotalSets;
+    activeGig.request_buffer_minutes = newBuffer;
+    performer.default_song_minutes = newDefaultMinutes;
+    lastCallStatus.textContent = newSetEndsAt ? 'Saved — Last Call is on for tonight.' : 'Saved — Last Call is off for tonight.';
+    lastCallStatus.className = 'manage-song-status ok';
   });
 
   // Saves instantly on blur (not every keystroke) if tonight's gig is
@@ -1821,6 +1931,8 @@
     const artist = newSongArtist.value.trim();
     const key = newSongKey.value.trim();
     const capo = newSongCapo.value.trim();
+    const rawMinutes = newSongMinutes.value.trim();
+    const estimatedMinutes = rawMinutes ? parseFloat(rawMinutes) : null;
     const pastedUrl = newSongUrl.value.trim();
     const file = newSongFile.files && newSongFile.files[0];
 
@@ -1856,6 +1968,7 @@
       artist,
       song_key: key || null,
       key_with_capo: capo || null,
+      estimated_minutes: estimatedMinutes,
       chart_url: chartUrl
     });
     addSongBtn.disabled = false;
@@ -1869,6 +1982,7 @@
     newSongArtist.value = '';
     newSongKey.value = '';
     newSongCapo.value = '';
+    newSongMinutes.value = '';
     newSongUrl.value = '';
     newSongFile.value = '';
 
@@ -2146,6 +2260,7 @@
           <input type="text" data-field="artist" value="${escapeHtml(s.artist)}" placeholder="Artist" />
           <input type="text" data-field="song_key" value="${escapeHtml(s.song_key || '')}" placeholder="Key" />
           <input type="text" data-field="key_with_capo" value="${escapeHtml(s.key_with_capo || '')}" placeholder="Key with capo" />
+          <input type="number" data-field="estimated_minutes" min="1" step="0.5" value="${s.estimated_minutes ?? ''}" placeholder="Est. minutes (optional)" />
         </div>
         <label class="hide-toggle">
           <input type="checkbox" data-field="is_hidden" ${s.is_hidden ? 'checked' : ''} />
@@ -2176,6 +2291,8 @@
         const artist = row.querySelector('[data-field="artist"]').value.trim();
         const songKey = row.querySelector('[data-field="song_key"]').value.trim();
         const capo = row.querySelector('[data-field="key_with_capo"]').value.trim();
+        const rawMinutes = row.querySelector('[data-field="estimated_minutes"]').value.trim();
+        const estimatedMinutes = rawMinutes ? parseFloat(rawMinutes) : null;
         const fileInput = row.querySelector('[data-replace-pdf]');
         const replacementFile = fileInput.files && fileInput.files[0];
         const isHidden = row.querySelector('[data-field="is_hidden"]').checked;
@@ -2190,6 +2307,7 @@
           artist,
           song_key: songKey || null,
           key_with_capo: capo || null,
+          estimated_minutes: estimatedMinutes,
           is_hidden: isHidden
         };
 
@@ -2274,13 +2392,19 @@
     // are scoped to this brand-new gig_session_id.
     const { data: lastGig } = await supabase
       .from('gig_sessions')
-      .select('request_cap, cooldown_minutes, display_name_override')
+      .select('request_cap, cooldown_minutes, display_name_override, request_buffer_minutes, total_sets')
       .eq('performer_id', performer.id)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
     const carriedCap = (lastGig && lastGig.request_cap) ?? null;
     const carriedCooldown = (lastGig && lastGig.cooldown_minutes) ?? null;
+    // Last Call settings carry forward the same way — except set_ends_at,
+    // which is always a fresh, blank wall-clock time for tonight (a
+    // leftover timestamp from a past gig would be meaningless, and almost
+    // certainly already in the past).
+    const carriedBuffer = (lastGig && lastGig.request_buffer_minutes) ?? null;
+    const carriedTotalSets = (lastGig && lastGig.total_sets) ?? null;
     // Whatever's currently typed wins; otherwise carry forward from the last
     // gig the same way the cap and cooldown do.
     const typedDisplayName = gigDisplayNameInput.value.trim();
@@ -2309,6 +2433,9 @@
       request_cap: carriedCap,
       cooldown_minutes: carriedCooldown,
       display_name_override: carriedDisplayName,
+      request_buffer_minutes: carriedBuffer,
+      total_sets: carriedTotalSets,
+      set_ends_at: null,
       status: 'active'
     });
     if (error) { alert('Could not start gig: ' + error.message); return; }
@@ -2366,7 +2493,7 @@
     if (gigIds.length > 0) {
       const { data: reqData, error: reqError } = await supabase
         .from('requests')
-        .select('gig_session_id, song_id, song_title, song_artist, tip_amount, status, is_manual')
+        .select('gig_session_id, song_id, song_title, song_artist, tip_amount, status, is_manual, spliced_at')
         .in('gig_session_id', gigIds)
         .eq('is_manual', false);
       if (reqError) {
@@ -2450,12 +2577,20 @@
     const lifetimeTips = requests.reduce((sum, r) => sum + Number(r.tip_amount || 0), 0);
     const songRequests = requests.filter(r => r.song_id);
     const tipOnlyCount = requests.filter(r => !r.song_id).length;
+    // Last Call tuning signal (item 29): a song request that never actually
+    // got spliced into the running order — still pending when the gig
+    // ended, or declined. Cheap to log since it's just a filter on data
+    // already being fetched; tells Travis whether cutoff timing (once he
+    // starts using it) is actually tuned right, or closing requests too
+    // early/late relative to what he can realistically still play.
+    const neverPlayedCount = songRequests.filter(r => !r.spliced_at).length;
 
     lifetimeSummaryEl.innerHTML = `
       <div class="report-stat"><div class="report-stat-value">${formatMoney(lifetimeTips)}</div><div class="report-stat-label">Total tips</div></div>
       <div class="report-stat"><div class="report-stat-value">${songRequests.length}</div><div class="report-stat-label">Song requests</div></div>
       <div class="report-stat"><div class="report-stat-value">${tipOnlyCount}</div><div class="report-stat-label">Tip-only (no song)</div></div>
       <div class="report-stat"><div class="report-stat-value">${gigs.length}</div><div class="report-stat-label">Gigs run</div></div>
+      <div class="report-stat"><div class="report-stat-value">${neverPlayedCount}</div><div class="report-stat-label">Requested but never played</div></div>
     `;
 
     // Solo-vs-followed split (item 24, decided 2026-08-29): only shown once
@@ -2512,6 +2647,7 @@
       const gigRequests = requests.filter(r => r.gig_session_id === g.id);
       const gigTips = gigRequests.reduce((sum, r) => sum + Number(r.tip_amount || 0), 0);
       const gigSongRequests = gigRequests.filter(r => r.song_id);
+      const gigNeverPlayed = gigSongRequests.filter(r => !r.spliced_at).length;
 
       const bySong = {};
       gigSongRequests.forEach(r => {
@@ -2549,7 +2685,7 @@
               <span class="gig-report-date">${dateLabel}</span>
               <span class="gig-report-status"> — ${g.status === 'active' ? 'live now' : 'ended'} · ${escapeHtml(g.gig_code)}${g.followerCount > 0 ? ` · 👥 Followed gig — ${g.followerCount} joined` : ''}</span>
             </div>
-            <div class="gig-report-stats">${gigSongRequests.length} requests · ${formatMoney(gigTips)}</div>
+            <div class="gig-report-stats">${gigSongRequests.length} requests · ${formatMoney(gigTips)}${gigNeverPlayed > 0 ? ` · ${gigNeverPlayed} never played` : ''}</div>
           </div>
           <div class="gig-report-songs">${songRowsHtml}</div>
         </div>
