@@ -1185,6 +1185,22 @@
       return;
     }
 
+    // Last Call (item 29): a boost (another request for a song already
+    // pending) is explicitly exempt from cutoff, so it should never be
+    // flagged as "late" even if it happened to arrive after cutoff_reached_at
+    // — only the request that actually opened this song's queue slot
+    // tonight (the earliest pending row for that song_id) can be. Matches
+    // the same "simultaneous requests collapse into one occasion" rule
+    // used everywhere else in this app.
+    const earliestPendingBySong = new Map();
+    pendingRequests.forEach(r => {
+      if (!r.song_id) return;
+      const existing = earliestPendingBySong.get(r.song_id);
+      if (!existing || new Date(r.created_at) < new Date(existing)) {
+        earliestPendingBySong.set(r.song_id, r.created_at);
+      }
+    });
+
     drawerListEl.innerHTML = pendingRequests.map(r => {
       const song = r.songs;
       const tipLabel = r.tip_amount > 0 ? `$${Number(r.tip_amount).toFixed(0)}` : 'No tip';
@@ -1197,8 +1213,12 @@
       // Last Call (item 29): flagged, never auto-declined — the point is to
       // let the Master triage a late arrival by hand, not to hide or reject
       // it. cutoff_reached_at is only ever set once cutoff first fires, so
-      // this is false for every request on a gig with Last Call off.
-      const arrivedAfterCutoff = !!cutoffState.cutoff_reached_at && new Date(r.created_at) > new Date(cutoffState.cutoff_reached_at);
+      // this is false for every request on a gig with Last Call off. Only
+      // the earliest pending row for a song can be "late" — a boost on an
+      // already-queued song is never flagged, matching the crowd page's own
+      // cutoff exemption for it.
+      const isEarliestForSong = song && earliestPendingBySong.get(r.song_id) === r.created_at;
+      const arrivedAfterCutoff = isEarliestForSong && !!cutoffState.cutoff_reached_at && new Date(r.created_at) > new Date(cutoffState.cutoff_reached_at);
       const lateNoteHtml = arrivedAfterCutoff
         ? '<div class="note late-request-note">⏰ Came in after requests closed</div>'
         : '';
