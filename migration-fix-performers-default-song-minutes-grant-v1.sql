@@ -1,0 +1,23 @@
+-- Bribe The Band — fix a real, currently-breaking bug found 2026-09-07
+-- while hands-on testing Last Call on staging: console login was
+-- completely broken for every performer.
+--
+-- Root cause: migration-last-call-v1.sql added performers.default_song_minutes
+-- but `performers` uses column-level GRANTs, not a blanket table grant
+-- (migration-security-hardening-v1.sql deliberately revoked broad SELECT
+-- and re-granted only specific public-safe columns, per Wade's review — see
+-- 01-ARCHITECTURE-AND-DATA-MODEL.md). A brand-new column is never
+-- automatically included in that existing grant, so console.html's own
+-- afterLogin() query (which selects default_song_minutes alongside the
+-- already-granted columns) failed outright with 42501 "permission denied
+-- for table performers" -- not a graceful degradation, a hard login failure
+-- for every account.
+--
+-- Confirmed via direct query before writing this: selecting
+-- (id, handle, display_name) succeeds; adding default_song_minutes to that
+-- same select fails with exactly this error, and Postgres's own hint names
+-- the fix.
+--
+-- Run on STAGING immediately (Supabase SQL Editor) — this is fixing an
+-- active outage in the current build, not a new feature.
+grant select (default_song_minutes) on performers to authenticated;
