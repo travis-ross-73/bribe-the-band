@@ -1301,7 +1301,14 @@
         total_sets: newTotalSets,
         request_buffer_minutes: newBuffer
       }).eq('id', activeGig.id),
-      supabase.from('performers').update({ default_song_minutes: newDefaultMinutes }).eq('id', performer.id)
+      // .select() deliberately chained here (not just for gig_sessions
+      // above): found hands-on that a column-grant gap on an UPDATE, unlike
+      // SELECT, doesn't surface as an error at all with PostgREST's default
+      // minimal-return preference — it just silently writes nothing. Chaining
+      // .select() forces the same permission check SELECT already has,
+      // turning any future gap like this into a visible error instead of a
+      // silent no-op.
+      supabase.from('performers').update({ default_song_minutes: newDefaultMinutes }).eq('id', performer.id).select()
     ]);
 
     if (gigResult.error || performerResult.error) {
