@@ -8,6 +8,8 @@ Working-memory instructions for Claude Code sessions on this repo. Read `docs/HA
 
 Note: `docs/` currently only exists on `main` (and any branch cut from it, e.g. `prod-port`) — it was never merged onto `staging`. Read it via `git show main:docs/<file>` while working on `staging`, rather than switching branches back and forth.
 
+**`docs/` here is not the only copy.** These same numbered docs also live in the claude.ai Project's Knowledge (what Cowork sessions read from) — a separate, manually-uploaded read cache that nothing in Claude Code can write to directly. It only stays current when Travis re-uploads after a round of edits here, which is easy to forget. **At the end of any session where `docs/` was edited, remind Travis to refresh the Project Knowledge copy** — offer to zip the current `docs/` folder and send it if he doesn't already have a copy in hand. See `docs/04-DECISIONS-AND-OPEN-QUESTIONS.md`'s 2026-08-29 note ("Docs live in two places, on purpose") for the full reasoning.
+
 ## Branches
 
 - `main` — production (`bribetheband.live`), live Stripe, real users.
