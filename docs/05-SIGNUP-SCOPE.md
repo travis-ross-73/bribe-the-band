@@ -1,6 +1,6 @@
 # Self-Service Signup — Scope & Status
 
-Status: **Phase 1 built** (free signup + unified promo-code mechanism). Not yet deployed — the three files below still need to be uploaded/run by Travis. Real billing, the affiliate payout ledger, and device-count enforcement remain later phases, not built.
+Status: **Phase 1 built and confirmed actually deployed on both staging and production** (verified 2026-09-08 — `validate_promo_code()` tested on both, and the full `auth.signUp()` → `handle_new_performer_signup()` → real `performers` row flow tested end-to-end on staging with a throwaway account). This corrects a stale "not yet deployed" claim that had apparently sat here uncorrected for weeks after the real deployment happened — see `04-DECISIONS-AND-OPEN-QUESTIONS.md`'s 2026-09-08 session entry for the full verification writeup. Real billing, the affiliate payout ledger, and device-count enforcement remain later phases, not built.
 
 Originally written 2026-08-19 as a narrower "free signup only" scope. Updated the same day after Travis expanded the ask: "I'd like to be able to integrate payments but also have the ability to give a free account, as well as have an affiliate program (can be basic...just a percentage either in perpetuity for all linked sign-ups or a predetermined timeframe for that payout.)" Phase 1 below is what actually got built in response to that; it does not include real payments yet, by Travis's own direction ("Don't worry about the waiting performer... Just let[']s start the flow").
 
@@ -36,8 +36,11 @@ Unchanged from the original scoping conversation — still just an anchor to rea
 - **Tier B — 3-6 devices**: covers a small-to-full band. Suggested anchor: **$19/month or $169/year**.
 - **Tier C — 7+ devices**: larger ensembles — suggested as **contact/custom** rather than a fixed price.
 
+## Operational note: fake-domain test emails may now be rejected (found 2026-09-08)
+Testing the real signup flow with a `something@staging.bribetheband.test`-style fake-domain email (matching the pattern the 5 existing admin-created staging test accounts use) got rejected outright by Supabase with `email_address_invalid` — the existing accounts still log in fine, since they were created via the admin API, which bypasses this check; only a **new** account created through the normal public `signup.html`/`auth.signUp()` flow hit it. Not investigated further, but the timing (right after Resend SMTP went live on both environments) suggests real deliverability validation is now enforced where the built-in dev sender never checked it. If this comes up again: use a real-domain-format email (e.g. `something@gmail.com`) for a throwaway test signup instead of a fake `.test` domain.
+
 ## Still open, deliberately not decided here
-- Whether Supabase's email-confirmation-required setting should be on or off — affects whether a brand-new performer can log into the console immediately after signing up, or has to click a confirmation link first. This is a real setting in Travis's own Supabase project dashboard, not something set in code.
+- ~~Whether Supabase's email-confirmation-required setting should be on or off~~ — **already decided, not actually open**: `06-OWNERS-GUIDE-NOTES.md` documents this was turned ON 2026-08-20, motivated partly by wanting real, verified addresses toward an eventual email list. This bullet had gone stale here even though the decision was already recorded elsewhere.
 - Actual `promo_codes` rows for real affiliates/comps — Travis creates these himself when ready; example `insert` statements are included as comments in `migration-signup-v1.sql`.
 - Reaction to the pricing tiers above.
 - The device-count enforcement mechanism.
