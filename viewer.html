@@ -832,17 +832,13 @@
 
     viewerReady = true;
     showChrome();
-    window.__dbg = { role, beforeGoToIndex: true };
     await goToIndex(0, { record: false });
-    window.__dbg.afterGoToIndex = true;
-    window.__dbg.roleAtCheck = role;
 
     if (role === 'master') {
       addSongBtn.classList.remove('hidden');
       await refreshPendingRequests();
       requestPollTimer = setInterval(refreshPendingRequests, REQUEST_POLL_MS);
     } else {
-      window.__dbg.enteredFollowerBranch = true;
       // Follower: no request drawer here at all — just mirror whatever the
       // Master splices in. Seed the "already applied" set with every
       // request that's already spliced as of page load (including
@@ -1857,7 +1853,7 @@
   document.addEventListener('fullscreenchange', updateFullscreenBtnLabel);
   document.addEventListener('webkitfullscreenchange', updateFullscreenBtnLabel);
 
-  init().catch(err => { window.__dbg = window.__dbg || {}; window.__dbg.initError = err.message + '\n' + err.stack; });
+  init();
 </script>
 
 </body>
