@@ -844,6 +844,13 @@
       <div id="gig-report-list"></div>
     </section>
 
+    <section id="followed-gigs-section" class="hidden">
+      <h2>Gigs You've Followed</h2>
+      <div class="section-sub">Gigs where you joined as a Follower on someone else's account, filtered by the same range above. This isn't your own money — it's shown here so you can see how the night went, not as anything you earned.</div>
+      <div id="followed-gigs-summary" class="report-summary-grid"></div>
+      <div id="followed-gigs-list"></div>
+    </section>
+
     </div>
 
   </main>
@@ -965,9 +972,14 @@
   const reportRangeStart = document.getElementById('report-range-start');
   const reportRangeEnd = document.getElementById('report-range-end');
   const reportRangeApplyBtn = document.getElementById('report-range-apply-btn');
+  const followedGigsSection = document.getElementById('followed-gigs-section');
+  const followedGigsSummaryEl = document.getElementById('followed-gigs-summary');
+  const followedGigsListEl = document.getElementById('followed-gigs-list');
   let reportingLoaded = false;
   let allReportingGigs = [];      // unfiltered — fetched once, filtered client-side on range change
   let allReportingRequests = [];
+  let allFollowedGigs = [];       // item 24, second half: gigs THIS performer joined as a Follower
+  let allFollowedGigRequests = [];
 
 
   // ---------------- Auth ----------------
@@ -2516,9 +2528,18 @@
     const { data: followerCounts } = await supabase.rpc('get_follower_counts_for_my_gigs');
     const followerCountByGig = new Map((followerCounts || []).map(f => [f.gig_session_id, f.joined_count]));
 
+    // Item 24, second half — the Follower's own record of gigs THEY joined
+    // on someone else's account. Best-effort, same as the follower-count
+    // fetch above: a failure here shouldn't block the rest of the report
+    // (the vast majority of performers have never followed anyone).
+    const { data: followedGigs } = await supabase.rpc('get_gigs_i_followed');
+    const { data: followedRequests } = await supabase.rpc('get_requests_for_gigs_i_followed');
+
     reportingStatusEl.classList.add('hidden');
     allReportingGigs = (gigs || []).map(g => ({ ...g, followerCount: followerCountByGig.get(g.id) || 0 }));
     allReportingRequests = requests;
+    allFollowedGigs = followedGigs || [];
+    allFollowedGigRequests = followedRequests || [];
     applyReportingFilter();
   }
 
@@ -2570,6 +2591,21 @@
 
     lifetimeSummaryHeadingEl.textContent = `Totals — ${reportRangeLabel()}`;
     renderReporting(gigs, requests);
+
+    // Same range filter, applied to gigs THIS performer followed rather
+    // than ran themselves — filtered on the gig's own date, same as "By Gig" above.
+    let followedGigs = allFollowedGigs;
+    if (cutoffs) {
+      followedGigs = followedGigs.filter(g => {
+        const created = new Date(g.gig_created_at);
+        if (cutoffs.start && created < cutoffs.start) return false;
+        if (cutoffs.end && created > cutoffs.end) return false;
+        return true;
+      });
+    }
+    const followedGigIds = new Set(followedGigs.map(g => g.gig_session_id));
+    const followedRequests = allFollowedGigRequests.filter(r => followedGigIds.has(r.gig_session_id));
+    renderFollowedGigs(followedGigs, followedRequests);
   }
 
   reportRangeSelect.addEventListener('change', () => {
@@ -2692,6 +2728,78 @@
               <span class="gig-report-status"> — ${g.status === 'active' ? 'live now' : 'ended'} · ${escapeHtml(g.gig_code)}${g.followerCount > 0 ? ` · 👥 Followed gig — ${g.followerCount} joined` : ''}</span>
             </div>
             <div class="gig-report-stats">${gigSongRequests.length} requests · ${formatMoney(gigTips)}${gigNeverPlayed > 0 ? ` · ${gigNeverPlayed} never played` : ''}</div>
+          </div>
+          <div class="gig-report-songs">${songRowsHtml}</div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  // ---------------- Reporting: gigs I've followed (item 24, second half) ----------------
+  // Deliberately its own section, never merged into the "Totals"/"By Gig"
+  // numbers above — those are this performer's own Master earnings, and a
+  // followed-gig tip total must never read as belonging to the Follower.
+  // Hidden entirely unless this performer has actually followed at least
+  // one gig, so the vast majority of performers who never use this see
+  // nothing extra in their Reporting tab.
+  function renderFollowedGigs(followedGigs, followedRequests) {
+    if (followedGigs.length === 0) {
+      followedGigsSection.classList.add('hidden');
+      return;
+    }
+    followedGigsSection.classList.remove('hidden');
+
+    const lifetimeFollowedTips = followedRequests.reduce((sum, r) => sum + Number(r.tip_amount || 0), 0);
+    const lifetimeFollowedSongRequests = followedRequests.filter(r => r.song_id).length;
+    followedGigsSummaryEl.innerHTML = `
+      <div class="report-stat"><div class="report-stat-value">${formatMoney(lifetimeFollowedTips)}</div><div class="report-stat-label">Tips raised (not yours)</div></div>
+      <div class="report-stat"><div class="report-stat-value">${lifetimeFollowedSongRequests}</div><div class="report-stat-label">Song requests</div></div>
+      <div class="report-stat"><div class="report-stat-value">${followedGigs.length}</div><div class="report-stat-label">Gigs followed</div></div>
+    `;
+
+    followedGigsListEl.innerHTML = followedGigs.map(g => {
+      const gigRequests = followedRequests.filter(r => r.gig_session_id === g.gig_session_id);
+      const gigTips = gigRequests.reduce((sum, r) => sum + Number(r.tip_amount || 0), 0);
+      const gigSongRequests = gigRequests.filter(r => r.song_id);
+
+      const bySong = {};
+      gigSongRequests.forEach(r => {
+        if (!bySong[r.song_id]) bySong[r.song_id] = { count: 0, tips: 0, snapTitle: null, snapArtist: null };
+        const entry = bySong[r.song_id];
+        entry.count += 1;
+        entry.tips += Number(r.tip_amount || 0);
+        if (!entry.snapTitle && r.song_title) { entry.snapTitle = r.song_title; entry.snapArtist = r.song_artist; }
+      });
+      const songRows = Object.entries(bySong)
+        .map(([songId, v]) => ({ songId, ...v }))
+        .sort((a, b) => b.count - a.count || b.tips - a.tips);
+
+      const dateLabel = new Date(g.gig_created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+      const masterName = g.master_display_name || g.master_handle || 'a performer';
+
+      const songRowsHtml = songRows.length === 0
+        ? '<div class="empty-note">No song requests logged for this gig.</div>'
+        : songRows.map(t => {
+            const label = songLabel(t.songId, t.snapTitle, t.snapArtist);
+            return `
+              <div class="song-tally-row">
+                <span>
+                  <div class="song-title">${escapeHtml(label.title)}</div>
+                  <div class="song-artist">${escapeHtml(label.artist)}</div>
+                </span>
+                <span class="song-stats">${t.count}x · ${formatMoney(t.tips)}</span>
+              </div>
+            `;
+          }).join('');
+
+      return `
+        <div class="gig-report-row">
+          <div class="gig-report-top">
+            <div>
+              <span class="gig-report-date">${dateLabel}</span>
+              <span class="gig-report-status"> — Followed ${escapeHtml(masterName)}${g.gig_status !== 'active' ? '' : ' · still live'}</span>
+            </div>
+            <div class="gig-report-stats">${gigSongRequests.length} requests · ${formatMoney(gigTips)}</div>
           </div>
           <div class="gig-report-songs">${songRowsHtml}</div>
         </div>
