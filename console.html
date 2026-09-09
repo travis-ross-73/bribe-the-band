@@ -633,13 +633,11 @@
         <div class="step-label">Step 2 — Perform</div>
         <button class="primary" id="start-set-btn" disabled>Start the Set (Open PDF Charts)</button>
         <div class="button-caption">Opens the chart viewer in a new tab — the screen you actually swipe through and perform from.</div>
-        <button class="secondary hidden" id="join-follower-btn">+ Join as Follower (for another band member's tablet)</button>
-        <div class="section-sub hidden" id="join-follower-hint">Open this on a bandmate's tablet, logged in with the same account. It shows the same charts and swipes independently, but won't manage the request queue — that stays on this tablet (the "Master"). When a request gets accepted here, every Follower tablet briefly syncs to the same spot before splicing it in, so everyone's song order stays in sync.</div>
       </div>
 
       <div id="follower-link-panel" class="hidden">
-        <h3>Followers (Their Own Accounts)</h3>
-        <div class="section-sub">Invite a bandmate with their own login to follow tonight's set — share this link or read them the code. They'll log in (or create a free account) and automatically follow along; you'll see them listed below and can remove anyone anytime. Removed automatically when tonight's gig ends.</div>
+        <h3>Followers</h3>
+        <div class="section-sub">Invite a bandmate to follow tonight's set on their own account — share this link or read them the code. They'll log in (or create a free account) and automatically follow along; you'll see them listed below and can remove anyone anytime. Removed automatically when tonight's gig ends.</div>
         <div class="crowd-link-row">
           <span class="crowd-link-label">Follower join link</span>
           <a id="follower-join-link-url" class="crowd-link-url" href="#" target="_blank" rel="noopener">—</a>
@@ -720,6 +718,16 @@
       <div id="request-activity-header" class="request-activity-header hidden"></div>
       <div id="request-activity-stats" class="request-activity-stats hidden"></div>
       <div id="request-list"></div>
+    </section>
+
+    <section>
+      <h2>Follow Someone Else's Gig</h2>
+      <div class="section-sub">Have a gig code from another performer? Enter it here to follow along on your own account. This works independently of everything above — whether or not you have your own gig running.</div>
+      <div class="button-row" style="align-items:center;">
+        <input type="text" id="follow-gig-code-input" placeholder="Gig code" style="margin-bottom:0; text-transform:uppercase;" />
+        <button class="secondary" id="follow-gig-btn">Follow</button>
+      </div>
+      <div class="manage-song-status" id="follow-gig-status"></div>
     </section>
 
     </div>
@@ -896,13 +904,14 @@
   const gigDisplayNameStatus = document.getElementById('gig-display-name-status');
   const startGigBtn = document.getElementById('start-gig-btn');
   const startSetBtn = document.getElementById('start-set-btn');
-  const joinFollowerBtn = document.getElementById('join-follower-btn');
-  const joinFollowerHint = document.getElementById('join-follower-hint');
   const followerLinkPanel = document.getElementById('follower-link-panel');
   const followerJoinLinkUrlEl = document.getElementById('follower-join-link-url');
   const copyFollowerLinkBtn = document.getElementById('copy-follower-link-btn');
   const followerLinkStatus = document.getElementById('follower-link-status');
   const followerRosterEl = document.getElementById('follower-roster');
+  const followGigCodeInput = document.getElementById('follow-gig-code-input');
+  const followGigBtn = document.getElementById('follow-gig-btn');
+  const followGigStatus = document.getElementById('follow-gig-status');
   const requestListEl = document.getElementById('request-list');
   const requestActivityHeader = document.getElementById('request-activity-header');
   const requestActivityStats = document.getElementById('request-activity-stats');
@@ -1152,8 +1161,6 @@
       activeGigStatusCode.classList.remove('hidden');
       const hasSet = !!(activeGig.runtime_order && activeGig.runtime_order.length > 0);
       startSetBtn.disabled = !hasSet;
-      joinFollowerBtn.classList.toggle('hidden', !hasSet);
-      joinFollowerHint.classList.toggle('hidden', !hasSet);
       endGigBtn.classList.remove('hidden');
       // Once a gig is live, "Start New Gig" becomes the rarer, more
       // consequential action (it silently ends the current one) — demote it
@@ -1167,8 +1174,6 @@
       activeGigStatusText.textContent = 'No active gig right now.';
       activeGigStatusCode.classList.add('hidden');
       startSetBtn.disabled = true;
-      joinFollowerBtn.classList.add('hidden');
-      joinFollowerHint.classList.add('hidden');
       endGigBtn.classList.add('hidden');
       // No gig live — this is the one thing to do, so give it full weight.
       startGigBtn.classList.remove('secondary');
@@ -1366,14 +1371,21 @@
     window.open('viewer.html', '_blank');
   });
 
-  // Opens the viewer in Follower mode — same charts, independent swiping,
-  // no request-drawer controls. Meant to be opened on a bandmate's own
-  // tablet (same shared login), not this one — see migration-band-sync-v1.sql
-  // and the "Follower-side band sync" section of viewer.html for how a
-  // Follower stays in sync when this tablet (the Master) accepts a request.
-  joinFollowerBtn.addEventListener('click', () => {
-    if (!activeGig) return;
-    window.open('viewer.html?role=follower', '_blank');
+  // Follow someone else's gig on THIS account, via their gig code — the
+  // one and only way to become a Follower now that the old shared-login
+  // path (?role=follower) has been removed: one identity model, not two.
+  // Deliberately independent of whatever's happening in "Tonight's Gig"
+  // above — following another performer never touches this account's own
+  // gigs/setlists, so there's nothing to gate this on. Just navigates to
+  // the same viewer.html?join=<code> URL the shareable link already uses.
+  followGigBtn.addEventListener('click', () => {
+    const code = followGigCodeInput.value.trim().toUpperCase();
+    if (!code) {
+      followGigStatus.textContent = 'Enter a gig code first.';
+      followGigStatus.className = 'manage-song-status err';
+      return;
+    }
+    window.open(`viewer.html?join=${encodeURIComponent(code)}`, '_blank');
   });
 
   // Explicitly end tonight's gig without starting a new one — until now the

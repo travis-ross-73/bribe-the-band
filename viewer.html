@@ -561,22 +561,27 @@
 
   window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-  // Band-sync roles: every tablet shares the same login and loads the same
-  // gig, but only one — the Master — runs the live request drawer and
-  // accepts/declines. Every other tablet is a Follower: no drawer, no
-  // badge, just charts, and it mirrors whatever the Master splices in
-  // (see checkForFollowerSplices() below). A true solo performer never
-  // passes ?role=follower to anything, so nothing here changes for them —
-  // they're always Master, same as before this feature existed.
+  // Band-sync roles: only one tablet per gig — the Master — runs the live
+  // request drawer and accepts/declines. Every other tablet is a Follower:
+  // no drawer, no badge, just charts, and it mirrors whatever the Master
+  // splices in (see checkForFollowerSplices() below). A true solo performer
+  // never has a joinCode, so nothing here changes for them — they're always
+  // Master, same as before this feature existed.
+  //
+  // The only way to become a Follower is ?join=<gig_code> (item 22, decided
+  // 2026-08-29) — your OWN account, joined via a shared link/code. Always
+  // forces Follower mode — "Master exclusivity... no exceptions" — and the
+  // gig/song queries below are scoped to the gig owner's performer id
+  // (gigOwnerPerformerId), not the logged-in user's own, since a Follower is
+  // a different account than the Master whose set they're following.
+  //
+  // A legacy shared-login ?role=follower path existed here previously (every
+  // tablet logging in as the same account, with the URL param alone deciding
+  // Master vs. Follower) — removed 2026-09-09 in favor of this being the one
+  // and only way to follow: an account either runs its own gig or follows
+  // someone else's, never a shared login pretending to be a different role.
   const urlParams = new URLSearchParams(window.location.search);
-  let role = urlParams.get('role') === 'follower' ? 'follower' : 'master';
-  // ?join=<gig_code> (item 22, decided 2026-08-29): a Follower joining with
-  // their OWN account via a shared link/code, distinct from the legacy
-  // ?role=follower shared-login path above. Always forces Follower mode —
-  // "Master exclusivity... no exceptions" — and the gig/song queries below
-  // are scoped to the gig owner's performer id (gigOwnerPerformerId), not
-  // the logged-in user's own, since a joined Follower is a different account
-  // than the Master whose set they're following.
+  let role = 'master';
   const joinCode = urlParams.get('join');
 
   const topBar = document.getElementById('top-bar');
@@ -843,9 +848,8 @@
       // Uses the same SECURITY DEFINER RPC as checkForFollowerSplices()
       // below (see get_spliced_requests_for_gig in
       // migration-follower-growth-and-autoend-v1.sql) rather than a direct
-      // table read, so this also works for a genuinely-distinct-account
-      // Follower joined via ?join=<code>, not just the legacy shared-login
-      // ?role=follower path.
+      // table read, since a genuinely-distinct-account Follower has no
+      // ownership relationship to the gig for RLS to key off of.
       const { data: alreadySpliced } = await supabase.rpc('get_spliced_requests_for_gig', { p_gig_session_id: gig.id });
       (alreadySpliced || []).forEach(r => processedSpliceIds.add(r.id));
 
