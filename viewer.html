@@ -897,6 +897,10 @@
       const song = orderedSongs[i];
       loadingDetail.textContent = `Loading chart ${i + 1} of ${orderedSongs.length}: ${song.title}…`;
       try {
+        // A song can exist with no chart yet (added with just title/artist —
+        // see console.html's Add a Song). Fail with a clear message instead
+        // of letting pdf.js's own null-input error surface here.
+        if (!song.chart_url) throw new Error('No chart uploaded yet for this song.');
         const loadingTask = window.pdfjsLib.getDocument(song.chart_url);
         const pdf = await loadingTask.promise;
         for (let p = 1; p <= pdf.numPages; p++) {
@@ -1299,10 +1303,18 @@
   async function insertSongAtIndex(song, extra, insertAt, songInsertAt) {
     const requestInfo = extra && extra.requestInfo;
     const manualAdd = !!(extra && extra.manualAdd);
+    // Declared here, not inside the try block below: the catch block also
+    // reads this, and a `const` from inside try is out of scope in catch --
+    // a chart-load failure before this line would otherwise throw its own
+    // ReferenceError instead of falling back to the inline load-error entry.
+    const splicedAt = extra && extra.splicedAt;
     const newEntries = [];
     try {
+      // A song can exist with no chart yet (added with just title/artist —
+      // see console.html's Add a Song). Fail with a clear message instead
+      // of letting pdf.js's own null-input error surface here.
+      if (!song.chart_url) throw new Error('No chart uploaded yet for this song.');
       const pdf = await window.pdfjsLib.getDocument(song.chart_url).promise;
-      const splicedAt = extra && extra.splicedAt;
     for (let p = 1; p <= pdf.numPages; p++) {
         newEntries.push({
           song, pdf, pageNum: p, isFirstPageOfSong: p === 1, isLastPageOfSong: p === pdf.numPages,
