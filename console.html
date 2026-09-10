@@ -611,10 +611,29 @@
 
 <div id="login-view">
   <h1>🎤 Console Login</h1>
-  <input type="email" id="login-email" placeholder="Email" />
-  <input type="password" id="login-password" placeholder="Password" />
-  <button class="primary" id="login-btn" style="width:100%;">Log In</button>
-  <div class="error-msg" id="login-error"></div>
+  <div id="login-form">
+    <input type="email" id="login-email" placeholder="Email" />
+    <input type="password" id="login-password" placeholder="Password" />
+    <button class="primary" id="login-btn" style="width:100%;">Log In</button>
+    <div class="button-caption" style="text-align:center;"><a href="#" id="forgot-password-link">Forgot password?</a></div>
+    <div class="error-msg" id="login-error"></div>
+  </div>
+
+  <div id="reset-request-form" class="hidden">
+    <div class="section-sub" style="text-align:center;">Enter your email and we'll send a link to reset your password.</div>
+    <input type="email" id="reset-email" placeholder="Email" />
+    <button class="primary" id="send-reset-btn" style="width:100%;">Send Reset Link</button>
+    <div class="button-caption" style="text-align:center;"><a href="#" id="back-to-login-link">Back to log in</a></div>
+    <div class="manage-song-status" id="reset-request-status"></div>
+  </div>
+
+  <div id="reset-password-form" class="hidden">
+    <div class="section-sub" style="text-align:center;">Set a new password for your account.</div>
+    <input type="password" id="new-password-input" placeholder="New password (at least 8 characters)" />
+    <input type="password" id="confirm-password-input" placeholder="Confirm new password" />
+    <button class="primary" id="set-new-password-btn" style="width:100%;">Set New Password</button>
+    <div class="error-msg" id="reset-password-error"></div>
+  </div>
 </div>
 
 <div id="console-view" class="hidden">
@@ -903,6 +922,16 @@
       <div class="manage-song-status" id="follow-gig-status"></div>
     </section>
 
+    <section>
+      <h2>Change Password<span class="info-wrap"><button type="button" class="info-icon" aria-label="More info">i</button><div class="info-popover hidden">Update the password for this account. You'll stay logged in here — any other device logged in with the old password will need the new one next time.</div></span></h2>
+      <input type="password" id="change-password-new" placeholder="New password (at least 8 characters)" />
+      <input type="password" id="change-password-confirm" placeholder="Confirm new password" />
+      <div class="button-row">
+        <button class="secondary" id="change-password-btn">Update Password</button>
+      </div>
+      <div class="manage-song-status" id="change-password-status"></div>
+    </section>
+
     </div>
 
   </main>
@@ -929,11 +958,33 @@
   const loginView = document.getElementById('login-view');
   const consoleView = document.getElementById('console-view');
   const consoleAccountNameEl = document.getElementById('console-account-name');
+  const loginForm = document.getElementById('login-form');
   const loginEmail = document.getElementById('login-email');
   const loginPassword = document.getElementById('login-password');
   const loginBtn = document.getElementById('login-btn');
   const loginError = document.getElementById('login-error');
   const logoutBtn = document.getElementById('logout-btn');
+  const forgotPasswordLink = document.getElementById('forgot-password-link');
+  const backToLoginLink = document.getElementById('back-to-login-link');
+  const resetRequestForm = document.getElementById('reset-request-form');
+  const resetEmail = document.getElementById('reset-email');
+  const sendResetBtn = document.getElementById('send-reset-btn');
+  const resetRequestStatus = document.getElementById('reset-request-status');
+  const resetPasswordForm = document.getElementById('reset-password-form');
+  const newPasswordInput = document.getElementById('new-password-input');
+  const confirmPasswordInput = document.getElementById('confirm-password-input');
+  const setNewPasswordBtn = document.getElementById('set-new-password-btn');
+  const resetPasswordError = document.getElementById('reset-password-error');
+  const changePasswordNew = document.getElementById('change-password-new');
+  const changePasswordConfirm = document.getElementById('change-password-confirm');
+  const changePasswordBtn = document.getElementById('change-password-btn');
+  const changePasswordStatus = document.getElementById('change-password-status');
+
+  // A password-reset email link lands back here with `type=recovery` in the
+  // URL (hash for the classic implicit flow, query string if the project's
+  // ever switched to PKCE) — checked once, up front, so the boot logic
+  // below doesn't race the recovery session into a normal afterLogin().
+  const isPasswordRecovery = window.location.hash.includes('type=recovery') || window.location.search.includes('type=recovery');
 
   const activeGigStatus = document.getElementById('active-gig-status');
   const activeGigStatusText = document.getElementById('active-gig-status-text');
@@ -1058,6 +1109,96 @@
   logoutBtn.addEventListener('click', async () => {
     await supabase.auth.signOut();
     location.reload();
+  });
+
+  // ---------------- Forgot / reset password ----------------
+  forgotPasswordLink.addEventListener('click', (e) => {
+    e.preventDefault();
+    loginError.textContent = '';
+    loginForm.classList.add('hidden');
+    resetRequestForm.classList.remove('hidden');
+  });
+
+  backToLoginLink.addEventListener('click', (e) => {
+    e.preventDefault();
+    resetRequestStatus.textContent = '';
+    resetRequestForm.classList.add('hidden');
+    loginForm.classList.remove('hidden');
+  });
+
+  sendResetBtn.addEventListener('click', async () => {
+    const email = resetEmail.value.trim();
+    if (!email) {
+      resetRequestStatus.textContent = 'Enter your email first.';
+      resetRequestStatus.className = 'manage-song-status err';
+      return;
+    }
+    resetRequestStatus.textContent = 'Sending…';
+    resetRequestStatus.className = 'manage-song-status';
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/console.html`
+    });
+    // Same message either way, on purpose — Supabase itself doesn't reveal
+    // whether an email has an account attached, so this shouldn't either.
+    resetRequestStatus.textContent = error
+      ? 'Could not send reset email: ' + error.message
+      : 'If that email has an account, a reset link is on its way.';
+    resetRequestStatus.className = error ? 'manage-song-status err' : 'manage-song-status ok';
+  });
+
+  // Reached only via isPasswordRecovery below (the emailed reset link) —
+  // sets the new password on the recovery session Supabase already
+  // established from the URL, then logs straight into the console since
+  // that session is already valid.
+  setNewPasswordBtn.addEventListener('click', async () => {
+    resetPasswordError.textContent = '';
+    const pw = newPasswordInput.value;
+    const confirmPw = confirmPasswordInput.value;
+    if (pw.length < 8) {
+      resetPasswordError.textContent = 'Password must be at least 8 characters.';
+      return;
+    }
+    if (pw !== confirmPw) {
+      resetPasswordError.textContent = 'Passwords do not match.';
+      return;
+    }
+    setNewPasswordBtn.disabled = true;
+    const { error } = await supabase.auth.updateUser({ password: pw });
+    setNewPasswordBtn.disabled = false;
+    if (error) {
+      resetPasswordError.textContent = error.message;
+      return;
+    }
+    resetPasswordForm.classList.add('hidden');
+    await afterLogin();
+  });
+
+  // ---------------- Settings tab: Change Password (already logged in) ----------------
+  changePasswordBtn.addEventListener('click', async () => {
+    const pw = changePasswordNew.value;
+    const confirmPw = changePasswordConfirm.value;
+    if (pw.length < 8) {
+      changePasswordStatus.textContent = 'Password must be at least 8 characters.';
+      changePasswordStatus.className = 'manage-song-status err';
+      return;
+    }
+    if (pw !== confirmPw) {
+      changePasswordStatus.textContent = 'Passwords do not match.';
+      changePasswordStatus.className = 'manage-song-status err';
+      return;
+    }
+    changePasswordStatus.textContent = 'Saving…';
+    changePasswordStatus.className = 'manage-song-status';
+    const { error } = await supabase.auth.updateUser({ password: pw });
+    if (error) {
+      changePasswordStatus.textContent = 'Could not update: ' + error.message;
+      changePasswordStatus.className = 'manage-song-status err';
+      return;
+    }
+    changePasswordNew.value = '';
+    changePasswordConfirm.value = '';
+    changePasswordStatus.textContent = 'Password updated.';
+    changePasswordStatus.className = 'manage-song-status ok';
   });
 
   async function afterLogin() {
@@ -3000,10 +3141,19 @@
   });
 
   // ---------------- Boot: resume session if already logged in ----------------
-  (async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session) await afterLogin();
-  })();
+  if (isPasswordRecovery) {
+    // A recovery link establishes a real (if narrowly-scoped) session, so
+    // the plain getSession() check below would otherwise treat this as a
+    // normal login and skip straight past the "set a new password" step.
+    loginForm.classList.add('hidden');
+    resetRequestForm.classList.add('hidden');
+    resetPasswordForm.classList.remove('hidden');
+  } else {
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) await afterLogin();
+    })();
+  }
 </script>
 
 </body>
