@@ -769,7 +769,7 @@
     <div class="tab-panel" data-tab-panel="library">
 
     <section>
-      <h2>Add a Song<span class="info-wrap"><button type="button" class="info-icon" aria-label="More info">i</button><div class="info-popover hidden">Upload the chart PDF right here and we'll host it. (You can still paste a URL instead if you've already hosted it somewhere else.)</div></span></h2>
+      <h2>Add a Song<span class="info-wrap"><button type="button" class="info-icon" aria-label="More info">i</button><div class="info-popover hidden">A chart PDF is optional — add the song now with just a title and artist, and upload the chart whenever you're ready (from Manage Songs below). Requesting and tipping work either way; you'll just need a chart before you can swipe through it live in the viewer. Upload it right here and we'll host it, or paste a URL instead if you've already hosted it somewhere else.</div></span></h2>
       <input type="text" id="new-song-title" placeholder="Song title" />
       <input type="text" id="new-song-artist" placeholder="Artist" />
       <input type="text" id="new-song-key" placeholder="Key, e.g. 'G'" />
@@ -779,7 +779,7 @@
         <input type="file" id="new-song-file" accept="application/pdf" />
       </div>
       <div class="or-divider">— or —</div>
-      <input type="text" id="new-song-url" placeholder="Chart PDF URL (if already hosted elsewhere)" />
+      <input type="text" id="new-song-url" placeholder="Chart PDF URL (optional — add one later if you don't have it yet)" />
       <button class="primary" id="add-song-btn">Add Song</button>
       <div class="error-msg" id="add-song-error"></div>
     </section>
@@ -1764,6 +1764,7 @@
         for (const s of orderedSongs) {
           i++;
           setExportStatus(setlistId, `Fetching chart ${i}/${orderedSongs.length}: ${s.title}…`);
+          if (!s.chart_url) throw new Error(`"${s.title}" has no chart uploaded yet — add one in Manage Songs, or remove it from this setlist before exporting.`);
           const res = await fetch(s.chart_url);
           if (!res.ok) throw new Error(`Could not fetch chart for "${s.title}" (HTTP ${res.status} from ${s.chart_url})`);
           const contentType = res.headers.get('content-type') || '(no content-type header)';
@@ -1785,6 +1786,7 @@
         setExportStatus(setlistId, `Fetching ${orderedSongs.length} charts…`);
         const zip = new JSZip();
         for (const s of orderedSongs) {
+          if (!s.chart_url) throw new Error(`"${s.title}" has no chart uploaded yet — add one in Manage Songs, or remove it from this setlist before exporting.`);
           const bytes = await fetch(s.chart_url).then(r => {
             if (!r.ok) throw new Error(`Could not fetch chart for "${s.title}"`);
             return r.arrayBuffer();
@@ -2049,15 +2051,11 @@
       addSongError.textContent = 'Title and artist are required.';
       return;
     }
-    if (!file && !pastedUrl) {
-      addSongError.textContent = 'Choose a PDF to upload, or paste a chart URL.';
-      return;
-    }
 
     const id = uniqueSlug(performerScopedSlug(title));
     addSongBtn.disabled = true;
 
-    let chartUrl = pastedUrl;
+    let chartUrl = pastedUrl || null;
     try {
       if (file) {
         addSongError.textContent = 'Uploading PDF…';
@@ -2376,8 +2374,8 @@
           Hide from request page${s.is_hidden ? ' <span class="hidden-badge">Hidden</span>' : ''}
         </label>
         <div class="row-bottom">
-          <div class="chart-link"><a href="${chartLinkHref(s.chart_url)}" target="_blank" rel="noopener" data-chart-link>View current PDF</a></div>
-          <input type="file" data-replace-pdf accept="application/pdf" />
+          <div class="chart-link">${s.chart_url ? `<a href="${chartLinkHref(s.chart_url)}" target="_blank" rel="noopener" data-chart-link>View current PDF</a>` : `<span data-chart-link class="manage-song-status">No chart uploaded yet</span>`}</div>
+          <input type="file" data-replace-pdf accept="application/pdf" title="${s.chart_url ? 'Replace the chart PDF' : 'Upload a chart PDF'}" />
           <div class="button-row" style="flex:0; gap:6px;">
             <button class="tiny" data-save>Save</button>
             <button class="tiny danger" data-delete>Delete</button>
@@ -2434,10 +2432,21 @@
           renderBuilder();
           // Refresh just this row's "view PDF" link in place, rather than
           // re-rendering the whole Manage Songs list (which would blow away
-          // any edits in progress on other rows).
+          // any edits in progress on other rows). A song with no prior chart
+          // shows a plain <span> there (see renderManageSongs) — swap it for
+          // a real <a> rather than just setting href on whatever element is
+          // there, since a first-time upload changes which tag it should be.
           if (updates.chart_url) {
             const linkEl = row.querySelector('[data-chart-link]');
-            if (linkEl) linkEl.setAttribute('href', chartLinkHref(updates.chart_url));
+            if (linkEl) {
+              const a = document.createElement('a');
+              a.href = chartLinkHref(updates.chart_url);
+              a.target = '_blank';
+              a.rel = 'noopener';
+              a.setAttribute('data-chart-link', '');
+              a.textContent = 'View current PDF';
+              linkEl.replaceWith(a);
+            }
           }
         } catch (err) {
           setStatus('Failed: ' + err.message, 'err');
