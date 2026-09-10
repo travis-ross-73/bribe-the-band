@@ -74,6 +74,50 @@
     font-size: 0.85rem;
     margin-bottom: 14px;
   }
+
+  /* Info icon + popover — replaces most of the old always-visible
+     section-sub paragraphs. Click-to-toggle, not hover-only: the console
+     can run on a touch-only iPad with no hover state at all, so a
+     hover-only tooltip would simply never appear there. */
+  h2, h3 { display: flex; align-items: center; gap: 0; }
+  .info-wrap { position: relative; display: inline-flex; margin-left: 8px; }
+  .info-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 1px solid var(--muted);
+    background: transparent;
+    color: var(--muted);
+    font-size: 0.7rem;
+    font-style: italic;
+    font-weight: 700;
+    font-family: Georgia, 'Times New Roman', serif;
+    line-height: 1;
+    padding: 0;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .info-icon:hover, .info-icon.open { border-color: var(--accent); color: var(--accent); }
+  .info-popover {
+    position: absolute;
+    top: 26px;
+    left: 0;
+    z-index: 20;
+    width: 260px;
+    max-width: 70vw;
+    background: #232741;
+    border: 1px solid #3a3f55;
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 0.8rem;
+    font-weight: 400;
+    color: var(--text);
+    line-height: 1.45;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.35);
+  }
   input, select {
     width: 100%;
     padding: 10px 12px;
@@ -595,13 +639,13 @@
       <button class="tab-btn" data-tab="setlists">Setlists</button>
       <button class="tab-btn" data-tab="library">Song Library</button>
       <button class="tab-btn" data-tab="reporting">Reporting</button>
+      <button class="tab-btn" data-tab="settings">Settings</button>
     </div>
 
     <div class="tab-panel" data-tab-panel="tonight">
 
     <section>
-      <h2>Tonight's Gig</h2>
-      <div class="section-sub">Start a new gig to make it live for the crowd page, or check what's currently active.</div>
+      <h2>Tonight's Gig<span class="info-wrap"><button type="button" class="info-icon" aria-label="More info">i</button><div class="info-popover hidden">Start a new gig to make it live for the crowd page, or check what's currently active.</div></span></h2>
 
       <div id="active-gig-status" class="none">
         <span class="gig-status-dot"></span>
@@ -636,8 +680,7 @@
       </div>
 
       <div id="follower-link-panel" class="hidden">
-        <h3>Followers</h3>
-        <div class="section-sub">Invite a bandmate to follow tonight's set on their own account — share this link or read them the code. They'll log in (or create a free account) and automatically follow along; you'll see them listed below and can remove anyone anytime. Removed automatically when tonight's gig ends.</div>
+        <h3>Followers<span class="info-wrap"><button type="button" class="info-icon" aria-label="More info">i</button><div class="info-popover hidden">Invite a bandmate to follow tonight's set on their own account — share this link or read them the code. They'll log in (or create a free account) and automatically follow along; you'll see them listed below and can remove anyone anytime. Removed automatically when tonight's gig ends.</div></span></h3>
         <div class="crowd-link-row">
           <span class="crowd-link-label">Follower join link</span>
           <a id="follower-join-link-url" class="crowd-link-url" href="#" target="_blank" rel="noopener">—</a>
@@ -648,8 +691,7 @@
       </div>
 
       <div id="gig-caps-panel" class="hidden">
-        <h3>Nightly Request Cap</h3>
-        <div class="section-sub">One limit, applied to every song tonight — once a song has been requested this many times, the crowd page blocks new requests for it (with a friendly message) until you start a new gig, or hit "Reset" below. Leave blank for no limit. Carries over from your last gig automatically — tweak as needed for tonight.</div>
+        <h3>Nightly Request Cap<span class="info-wrap"><button type="button" class="info-icon" aria-label="More info">i</button><div class="info-popover hidden">Once a song has been requested this many times, the crowd page blocks new requests for it (with a friendly message) until you start a new gig, or hit "Reset" below. Leave blank for no limit. Carries over from your last gig automatically — tweak as needed for tonight.</div></span></h3>
         <div class="gig-cap-row">
           <div>
             <div class="gig-cap-title">Max requests per song</div>
@@ -672,35 +714,27 @@
       </div>
 
       <div id="last-call-panel" class="hidden">
-        <h3>Last Call (Optional)</h3>
-        <div class="section-sub">Automatically slows down and eventually closes new song requests as tonight's set runs out of time to actually play them. Leave "Show wraps at" blank to leave this off entirely — nothing changes for tonight's gig without it.</div>
+        <h3>Last Call (Optional)<span class="info-wrap"><button type="button" class="info-icon" aria-label="More info">i</button><div class="info-popover hidden">Automatically slows down and eventually closes new song requests as tonight's set runs out of time to actually play them. Leave "Show wraps at" blank to leave this off entirely — nothing changes for tonight's gig without it. The account-wide default song length now lives in the Settings tab.</div></span></h3>
         <div class="gig-cap-row">
           <div>
             <div class="gig-cap-title">Show wraps at</div>
-            <div class="gig-cap-artist">The end of your <em>last</em> set tonight — not a break between sets. Requests keep coming in right through any set break either way.</div>
+            <div class="gig-cap-artist">The end of your <em>last</em> set tonight, not a break between sets.</div>
           </div>
           <input type="datetime-local" id="gig-set-ends-at-input" />
         </div>
         <div class="gig-cap-row">
           <div>
             <div class="gig-cap-title">Sets tonight</div>
-            <div class="gig-cap-artist">Just for your own reference right now — requests never pause between sets regardless of this number.</div>
+            <div class="gig-cap-artist">Reference only — requests never pause between sets.</div>
           </div>
           <input type="number" min="1" step="1" id="gig-total-sets-input" placeholder="1" />
         </div>
         <div class="gig-cap-row">
           <div>
             <div class="gig-cap-title">Buffer (minutes)</div>
-            <div class="gig-cap-artist">Safety margin before the hard cutoff, and how far ahead the soft "Last Call" warning shows up on the crowd page.</div>
+            <div class="gig-cap-artist">Cutoff safety margin, and soft-warning lead time.</div>
           </div>
           <input type="number" min="1" step="1" id="gig-request-buffer-input" placeholder="10" />
-        </div>
-        <div class="gig-cap-row">
-          <div>
-            <div class="gig-cap-title">Default minutes per song</div>
-            <div class="gig-cap-artist">Applies to your whole account, not just tonight — used whenever a song in Song Library has no estimated-minutes override of its own.</div>
-          </div>
-          <input type="number" min="1" step="0.5" id="default-song-minutes-input" placeholder="4" />
         </div>
         <div class="button-row">
           <button class="secondary" id="save-last-call-btn">Save for Tonight</button>
@@ -711,23 +745,12 @@
 
     <section>
       <div class="section-header-row">
-        <h2>Request Activity</h2>
+        <h2>Request Activity<span class="info-wrap"><button type="button" class="info-icon" aria-label="More info">i</button><div class="info-popover hidden">A running tally of everything requested tonight — accepting a request into the set happens from the live request drawer in the chart viewer, so this is just for keeping an eye on things. It keeps every request from this gig (pending, accepted, and dismissed) until you start a new gig — nothing here clears on its own. This doesn't update live as things happen on the viewer tablet — hit Refresh to pull the current data.</div></span></h2>
         <button class="tiny" id="refresh-requests-btn">Refresh</button>
       </div>
-      <div class="section-sub">A running tally of everything requested tonight — accepting a request into the set happens from the live request drawer in the chart viewer, so this is just for keeping an eye on things. It keeps every request from this gig (pending, accepted, and dismissed) until you start a new gig — nothing here clears on its own. This doesn't update live as things happen on the viewer tablet — hit Refresh to pull the current data.</div>
       <div id="request-activity-header" class="request-activity-header hidden"></div>
       <div id="request-activity-stats" class="request-activity-stats hidden"></div>
       <div id="request-list"></div>
-    </section>
-
-    <section>
-      <h2>Follow Someone Else's Gig</h2>
-      <div class="section-sub">Have a gig code from another performer? Enter it here to follow along on your own account. This works independently of everything above — whether or not you have your own gig running.</div>
-      <div class="button-row" style="align-items:center;">
-        <input type="text" id="follow-gig-code-input" placeholder="Gig code" style="margin-bottom:0; text-transform:uppercase;" />
-        <button class="secondary" id="follow-gig-btn">Follow</button>
-      </div>
-      <div class="manage-song-status" id="follow-gig-status"></div>
     </section>
 
     </div>
@@ -735,8 +758,7 @@
     <div class="tab-panel" data-tab-panel="setlists">
 
     <section>
-      <h2>Build a Setlist</h2>
-      <div class="section-sub">Search and add songs on the left. They land in order on the right — use the arrows to rearrange.</div>
+      <h2>Build a Setlist<span class="info-wrap"><button type="button" class="info-icon" aria-label="More info">i</button><div class="info-popover hidden">Search and add songs on the left. They land in order on the right — use the arrows to rearrange.</div></span></h2>
 
       <div id="editing-banner" class="hidden"></div>
 
@@ -772,8 +794,7 @@
     <div class="tab-panel" data-tab-panel="library">
 
     <section>
-      <h2>Add a Song</h2>
-      <div class="section-sub">Upload the chart PDF right here — we'll send it to your Wasabi bucket for you. (You can still paste a URL instead if you've already hosted it somewhere.)</div>
+      <h2>Add a Song<span class="info-wrap"><button type="button" class="info-icon" aria-label="More info">i</button><div class="info-popover hidden">Upload the chart PDF right here — we'll send it to your Wasabi bucket for you. (You can still paste a URL instead if you've already hosted it somewhere.)</div></span></h2>
       <input type="text" id="new-song-title" placeholder="Song title" />
       <input type="text" id="new-song-artist" placeholder="Artist" />
       <input type="text" id="new-song-key" placeholder="Key, e.g. 'G'" />
@@ -789,15 +810,13 @@
     </section>
 
     <section>
-      <h2>Bulk Add from PDFs</h2>
-      <div class="section-sub">Select several chart PDFs at once, then review and fix the title, artist, and key for each one in the table below before uploading them all together.</div>
+      <h2>Bulk Add from PDFs<span class="info-wrap"><button type="button" class="info-icon" aria-label="More info">i</button><div class="info-popover hidden">Select several chart PDFs at once, then review and fix the title, artist, and key for each one in the table below before uploading them all together.</div></span></h2>
 
       <label for="bulk-file-input" class="bulk-field-label">Chart PDFs</label>
       <input type="file" id="bulk-file-input" accept="application/pdf" multiple />
 
       <div class="bulk-csv-section">
-        <div class="section-sub">Already worked out the title/artist/key for each file — say, after splitting one big multi-song PDF into individual charts? Import that as a CSV below and it'll fill in the table for you automatically, matched by filename, instead of typing it all in by hand.</div>
-        <label for="bulk-csv-input" class="bulk-field-label">Metadata CSV <span class="bulk-optional-tag">(optional)</span></label>
+        <label for="bulk-csv-input" class="bulk-field-label">Metadata CSV <span class="bulk-optional-tag">(optional)</span><span class="info-wrap"><button type="button" class="info-icon" aria-label="More info">i</button><div class="info-popover hidden">Already worked out the title/artist/key for each file — say, after splitting one big multi-song PDF into individual charts? Import that as a CSV below and it'll fill in the table for you automatically, matched by filename, instead of typing it all in by hand.</div></span></label>
         <input type="file" id="bulk-csv-input" accept=".csv,text/csv" />
         <a href="#" id="bulk-csv-template-link" class="bulk-csv-template-link">Download a blank CSV template</a>
         <div class="bulk-csv-status" id="bulk-csv-status"></div>
@@ -811,8 +830,7 @@
     </section>
 
     <section>
-      <h2>Manage Songs</h2>
-      <div class="section-sub">Edit song info, replace a chart PDF, or remove a song from your catalog entirely.</div>
+      <h2>Manage Songs<span class="info-wrap"><button type="button" class="info-icon" aria-label="More info">i</button><div class="info-popover hidden">Edit song info, replace a chart PDF, or remove a song from your catalog entirely.</div></span></h2>
       <div class="song-count-line" id="manage-song-count"></div>
       <input type="text" id="song-manage-search" placeholder="Search your catalog…" />
       <div id="manage-song-list"></div>
@@ -823,8 +841,7 @@
     <div class="tab-panel" data-tab-panel="reporting">
 
     <section>
-      <h2>Reporting Range</h2>
-      <div class="section-sub">Filters both sections below. Counts real crowd requests only — manually-added songs don't count as requests, and don't add a tip.</div>
+      <h2>Reporting Range<span class="info-wrap"><button type="button" class="info-icon" aria-label="More info">i</button><div class="info-popover hidden">Filters both sections below. Counts real crowd requests only — manually-added songs don't count as requests, and don't add a tip.</div></span></h2>
       <div id="reporting-status" class="empty-note hidden"></div>
       <select id="report-range-select">
         <option value="all">All time</option>
@@ -847,16 +864,41 @@
     </section>
 
     <section>
-      <h2>By Gig</h2>
-      <div class="section-sub">Every gig in the selected range, most recent first — tip total, request count, and a per-song breakdown.</div>
+      <h2>By Gig<span class="info-wrap"><button type="button" class="info-icon" aria-label="More info">i</button><div class="info-popover hidden">Every gig in the selected range, most recent first — tip total, request count, and a per-song breakdown.</div></span></h2>
       <div id="gig-report-list"></div>
     </section>
 
     <section id="followed-gigs-section" class="hidden">
-      <h2>Gigs You've Followed</h2>
-      <div class="section-sub">Gigs where you joined as a Follower on someone else's account, filtered by the same range above. This isn't your own money — it's shown here so you can see how the night went, not as anything you earned.</div>
+      <h2>Gigs You've Followed<span class="info-wrap"><button type="button" class="info-icon" aria-label="More info">i</button><div class="info-popover hidden">Gigs where you joined as a Follower on someone else's account, filtered by the same range above. This isn't your own money — it's shown here so you can see how the night went, not as anything you earned.</div></span></h2>
       <div id="followed-gigs-summary" class="report-summary-grid"></div>
       <div id="followed-gigs-list"></div>
+    </section>
+
+    </div>
+
+    <div class="tab-panel" data-tab-panel="settings">
+
+    <section>
+      <h2>Default Song Length<span class="info-wrap"><button type="button" class="info-icon" aria-label="More info">i</button><div class="info-popover hidden">Applies to your whole account, not just tonight — used by Last Call whenever a song in Song Library has no estimated-minutes override of its own.</div></span></h2>
+      <div class="gig-cap-row">
+        <div>
+          <div class="gig-cap-title">Default minutes per song</div>
+        </div>
+        <input type="number" min="1" step="0.5" id="default-song-minutes-input" placeholder="4" />
+      </div>
+      <div class="button-row">
+        <button class="secondary" id="save-default-song-minutes-btn">Save</button>
+      </div>
+      <div class="manage-song-status" id="default-song-minutes-status"></div>
+    </section>
+
+    <section>
+      <h2>Follow Someone Else's Gig<span class="info-wrap"><button type="button" class="info-icon" aria-label="More info">i</button><div class="info-popover hidden">Have a gig code from another performer? Enter it here to follow along on your own account. This works independently of your own gig, whether or not you have one running.</div></span></h2>
+      <div class="button-row" style="align-items:center;">
+        <input type="text" id="follow-gig-code-input" placeholder="Gig code" style="margin-bottom:0; text-transform:uppercase;" />
+        <button class="secondary" id="follow-gig-btn">Follow</button>
+      </div>
+      <div class="manage-song-status" id="follow-gig-status"></div>
     </section>
 
     </div>
@@ -929,6 +971,8 @@
   const gigTotalSetsInput = document.getElementById('gig-total-sets-input');
   const gigRequestBufferInput = document.getElementById('gig-request-buffer-input');
   const defaultSongMinutesInput = document.getElementById('default-song-minutes-input');
+  const saveDefaultSongMinutesBtn = document.getElementById('save-default-song-minutes-btn');
+  const defaultSongMinutesStatus = document.getElementById('default-song-minutes-status');
   const saveLastCallBtn = document.getElementById('save-last-call-btn');
   const lastCallStatus = document.getElementById('last-call-status');
 
@@ -1035,6 +1079,7 @@
     const accountName = performer.display_name || performer.handle;
     gigDisplayNameInput.placeholder = accountName;
     gigDisplayNameCaption.textContent = `Shown at the top of the crowd page tonight. Leave blank to use your account name ("${accountName}").`;
+    defaultSongMinutesInput.value = performer.default_song_minutes ?? '';
 
     loginView.classList.add('hidden');
     consoleView.classList.remove('hidden');
@@ -1274,9 +1319,6 @@
   // ---------------- Last Call: dynamic request cutoff (item 29) ----------------
   // set_ends_at/request_buffer_minutes/total_sets are per-gig (gig_sessions),
   // same optional/carries-forward pattern as the cap and cooldown above.
-  // default_song_minutes is per-performer (not per-gig) — there's no
-  // dedicated account-settings screen yet, so it lives here since this is
-  // the only place it's actually relevant today.
   function toDatetimeLocalValue(isoString) {
     if (!isoString) return '';
     const d = new Date(isoString);
@@ -1295,7 +1337,6 @@
     gigSetEndsAtInput.value = toDatetimeLocalValue(activeGig.set_ends_at);
     gigTotalSetsInput.value = activeGig.total_sets ?? '';
     gigRequestBufferInput.value = activeGig.request_buffer_minutes ?? '';
-    defaultSongMinutesInput.value = performer.default_song_minutes ?? '';
   }
 
   saveLastCallBtn.addEventListener('click', async () => {
@@ -1306,11 +1347,38 @@
     const newTotalSets = rawTotalSets ? parseInt(rawTotalSets, 10) : null;
     const rawBuffer = gigRequestBufferInput.value.trim();
     const newBuffer = rawBuffer ? parseInt(rawBuffer, 10) : null;
-    const rawDefaultMinutes = defaultSongMinutesInput.value.trim();
-    const newDefaultMinutes = rawDefaultMinutes ? parseFloat(rawDefaultMinutes) : null;
 
     lastCallStatus.textContent = 'Saving…';
     lastCallStatus.className = 'manage-song-status';
+
+    const { error } = await supabase.from('gig_sessions').update({
+      set_ends_at: newSetEndsAt,
+      total_sets: newTotalSets,
+      request_buffer_minutes: newBuffer
+    }).eq('id', activeGig.id);
+
+    if (error) {
+      lastCallStatus.textContent = 'Could not save: ' + error.message;
+      lastCallStatus.className = 'manage-song-status err';
+      return;
+    }
+    activeGig.set_ends_at = newSetEndsAt;
+    activeGig.total_sets = newTotalSets;
+    activeGig.request_buffer_minutes = newBuffer;
+    lastCallStatus.textContent = newSetEndsAt ? 'Saved — Last Call is on for tonight.' : 'Saved — Last Call is off for tonight.';
+    lastCallStatus.className = 'manage-song-status ok';
+  });
+
+  // ---------------- Settings tab: account-level Default Song Length ----------------
+  // default_song_minutes is per-performer, not per-gig, so unlike the
+  // gig-specific Last Call fields above, this is editable any time — not
+  // gated on having an active gig.
+  saveDefaultSongMinutesBtn.addEventListener('click', async () => {
+    const raw = defaultSongMinutesInput.value.trim();
+    const newDefaultMinutes = raw ? parseFloat(raw) : null;
+
+    defaultSongMinutesStatus.textContent = 'Saving…';
+    defaultSongMinutesStatus.className = 'manage-song-status';
 
     // performers has no RLS UPDATE policy letting a performer touch their
     // own row directly (found hands-on: a raw update() affects zero rows,
@@ -1318,26 +1386,16 @@
     // self-service write in this app goes through a scoped SECURITY
     // DEFINER function instead of opening broader table access, so this
     // does too, via set_my_default_song_minutes().
-    const [gigResult, performerResult] = await Promise.all([
-      supabase.from('gig_sessions').update({
-        set_ends_at: newSetEndsAt,
-        total_sets: newTotalSets,
-        request_buffer_minutes: newBuffer
-      }).eq('id', activeGig.id),
-      supabase.rpc('set_my_default_song_minutes', { p_minutes: newDefaultMinutes })
-    ]);
+    const { error } = await supabase.rpc('set_my_default_song_minutes', { p_minutes: newDefaultMinutes });
 
-    if (gigResult.error || performerResult.error) {
-      lastCallStatus.textContent = 'Could not save: ' + (gigResult.error || performerResult.error).message;
-      lastCallStatus.className = 'manage-song-status err';
+    if (error) {
+      defaultSongMinutesStatus.textContent = 'Could not save: ' + error.message;
+      defaultSongMinutesStatus.className = 'manage-song-status err';
       return;
     }
-    activeGig.set_ends_at = newSetEndsAt;
-    activeGig.total_sets = newTotalSets;
-    activeGig.request_buffer_minutes = newBuffer;
     performer.default_song_minutes = newDefaultMinutes;
-    lastCallStatus.textContent = newSetEndsAt ? 'Saved — Last Call is on for tonight.' : 'Saved — Last Call is off for tonight.';
-    lastCallStatus.className = 'manage-song-status ok';
+    defaultSongMinutesStatus.textContent = 'Saved.';
+    defaultSongMinutesStatus.className = 'manage-song-status ok';
   });
 
   // Saves instantly on blur (not every keystroke) if tonight's gig is
@@ -2846,6 +2904,26 @@
   const savedTab = localStorage.getItem(TAB_STORAGE_KEY);
   const validTabs = Array.from(tabButtons).map(btn => btn.dataset.tab);
   setActiveTab(validTabs.includes(savedTab) ? savedTab : 'tonight');
+
+  // ---------------- Info-icon popovers ----------------
+  // Click-to-toggle (not hover), via delegation so it also covers icons
+  // inside dynamically-rendered HTML (e.g. a future list row's own info
+  // icon), not just the ones present at page load.
+  document.addEventListener('click', (e) => {
+    const icon = e.target.closest('.info-icon');
+    document.querySelectorAll('.info-popover').forEach(popover => {
+      const ownIcon = popover.parentElement.querySelector('.info-icon');
+      if (icon !== ownIcon) popover.classList.add('hidden');
+    });
+    if (icon) {
+      icon.parentElement.querySelector('.info-popover')?.classList.toggle('hidden');
+    }
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      document.querySelectorAll('.info-popover').forEach(p => p.classList.add('hidden'));
+    }
+  });
 
   // ---------------- Boot: resume session if already logged in ----------------
   (async () => {
