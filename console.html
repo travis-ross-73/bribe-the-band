@@ -921,6 +921,16 @@
     </section>
 
     <section>
+      <h2>Payouts<span class="info-wrap"><button type="button" class="info-icon" aria-label="More info">i</button><div class="info-popover hidden">Connect a Stripe account so real crowd tips land directly with you — nothing pools through us. Takes a few minutes: Stripe asks for basic identity and bank info, hosted on their own secure page, not this one.</div></span></h2>
+      <div class="section-sub" id="stripe-connect-status-text">Checking status…</div>
+      <div class="button-row">
+        <button class="secondary" id="stripe-connect-btn">Connect with Stripe</button>
+        <button class="secondary hidden" id="stripe-connect-check-btn">Check Status</button>
+      </div>
+      <div class="manage-song-status" id="stripe-connect-error"></div>
+    </section>
+
+    <section>
       <h2>Follow Someone Else's Gig<span class="info-wrap"><button type="button" class="info-icon" aria-label="More info">i</button><div class="info-popover hidden">Have a gig code from another performer? Enter it here to follow along on your own account. This works independently of your own gig, whether or not you have one running.</div></span></h2>
       <div class="button-row" style="align-items:center;">
         <input type="text" id="follow-gig-code-input" placeholder="Gig code" style="margin-bottom:0; text-transform:uppercase;" />
@@ -986,6 +996,11 @@
   const changePasswordConfirm = document.getElementById('change-password-confirm');
   const changePasswordBtn = document.getElementById('change-password-btn');
   const changePasswordStatus = document.getElementById('change-password-status');
+
+  const stripeConnectStatusText = document.getElementById('stripe-connect-status-text');
+  const stripeConnectBtn = document.getElementById('stripe-connect-btn');
+  const stripeConnectCheckBtn = document.getElementById('stripe-connect-check-btn');
+  const stripeConnectError = document.getElementById('stripe-connect-error');
 
   // A password-reset email link lands back here with `type=recovery` in the
   // URL (hash for the classic implicit flow, query string if the project's
@@ -1208,6 +1223,81 @@
     changePasswordStatus.className = 'manage-song-status ok';
   });
 
+  // ---------------- Settings tab: Payouts (Stripe Connect Express) ----------------
+  function renderStripeConnectStatus(status) {
+    if (status === 'complete') {
+      stripeConnectStatusText.textContent = '✓ Connected — tips go straight to your own Stripe account.';
+      stripeConnectStatusText.style.color = 'var(--success)';
+      stripeConnectBtn.textContent = 'Update Stripe Info';
+      stripeConnectCheckBtn.classList.add('hidden');
+    } else if (status === 'pending') {
+      stripeConnectStatusText.textContent = 'Setup started, but not finished yet.';
+      stripeConnectStatusText.style.color = '';
+      stripeConnectBtn.textContent = 'Resume Setup';
+      stripeConnectCheckBtn.classList.remove('hidden');
+    } else if (status === 'restricted') {
+      stripeConnectStatusText.textContent = 'Stripe needs more info before this account can receive tips again.';
+      stripeConnectStatusText.style.color = 'var(--danger)';
+      stripeConnectBtn.textContent = 'Update Stripe Info';
+      stripeConnectCheckBtn.classList.remove('hidden');
+    } else {
+      stripeConnectStatusText.textContent = "Not connected yet — crowd tips can't reach you until this is done.";
+      stripeConnectStatusText.style.color = '';
+      stripeConnectBtn.textContent = 'Connect with Stripe';
+      stripeConnectCheckBtn.classList.add('hidden');
+    }
+  }
+
+  async function loadStripeConnectStatus() {
+    const { data, error } = await supabase.rpc('get_my_stripe_connect_status');
+    if (error) {
+      stripeConnectStatusText.textContent = 'Could not load payout status: ' + error.message;
+      return;
+    }
+    const row = (data || [])[0];
+    renderStripeConnectStatus(row ? row.stripe_onboarding_status : 'not_started');
+  }
+
+  async function callConnectEndpoint(path) {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) throw new Error('Not logged in.');
+    const resp = await fetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || 'Request failed.');
+    return data;
+  }
+
+  stripeConnectBtn.addEventListener('click', async () => {
+    stripeConnectError.textContent = '';
+    stripeConnectBtn.disabled = true;
+    try {
+      const { url } = await callConnectEndpoint('/api/create-connect-account-link');
+      window.location.href = url;
+    } catch (err) {
+      stripeConnectError.textContent = err.message;
+      stripeConnectError.className = 'manage-song-status err';
+      stripeConnectBtn.disabled = false;
+    }
+  });
+
+  stripeConnectCheckBtn.addEventListener('click', async () => {
+    stripeConnectError.textContent = 'Checking…';
+    stripeConnectError.className = 'manage-song-status';
+    stripeConnectCheckBtn.disabled = true;
+    try {
+      const { status } = await callConnectEndpoint('/api/check-connect-status');
+      renderStripeConnectStatus(status);
+      stripeConnectError.textContent = '';
+    } catch (err) {
+      stripeConnectError.textContent = err.message;
+      stripeConnectError.className = 'manage-song-status err';
+    }
+    stripeConnectCheckBtn.disabled = false;
+  });
+
   async function afterLogin() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
@@ -1252,6 +1342,24 @@
     if (activeTabBtn && activeTabBtn.dataset.tab === 'reporting' && !reportingLoaded) {
       reportingLoaded = true;
       loadReportingData();
+    }
+
+    // Landing back here from Stripe's hosted onboarding (see
+    // create-connect-account-link.js's return_url/refresh_url) — re-check
+    // status right away instead of waiting for a manual "Check Status"
+    // click, then strip the query param so a later refresh doesn't repeat it.
+    const stripeConnectParam = new URLSearchParams(window.location.search).get('stripe_connect');
+    if (stripeConnectParam === 'return' || stripeConnectParam === 'refresh') {
+      history.replaceState(null, '', window.location.pathname);
+      try {
+        const { status } = await callConnectEndpoint('/api/check-connect-status');
+        renderStripeConnectStatus(status);
+      } catch (err) {
+        console.error('Auto Stripe-connect status check failed', err);
+        await loadStripeConnectStatus();
+      }
+    } else {
+      await loadStripeConnectStatus();
     }
   }
 
