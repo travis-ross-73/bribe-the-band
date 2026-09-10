@@ -213,12 +213,15 @@
   }
   .song-row-item:last-child { border-bottom: none; }
   .song-row-item .artist { color: var(--muted); font-size: 0.78rem; }
-  .song-row-item .order-num {
+  .song-row-item .order-num-input {
     color: var(--accent);
     font-weight: 700;
     font-size: 0.8rem;
-    width: 20px;
+    width: 34px;
     flex-shrink: 0;
+    padding: 3px 2px;
+    margin-bottom: 0;
+    text-align: center;
   }
   .song-row-item .row-actions { display: flex; gap: 4px; flex-shrink: 0; }
   .empty-note { color: var(--muted); font-size: 0.85rem; text-align: center; padding: 14px; }
@@ -471,15 +474,6 @@
     gap: 8px;
   }
   .manage-song-grid input { margin-bottom: 0; }
-  #gig-caps-panel {
-    margin-top: 18px;
-    padding-top: 16px;
-    border-top: 1px solid #2a2e40;
-  }
-  #gig-caps-panel h3 {
-    margin: 0 0 4px;
-    font-size: 1rem;
-  }
   .gig-cap-row {
     display: flex;
     align-items: center;
@@ -686,31 +680,12 @@
           <a id="follower-join-link-url" class="crowd-link-url" href="#" target="_blank" rel="noopener">—</a>
           <button class="tiny" id="copy-follower-link-btn">Copy Link</button>
         </div>
+        <div class="crowd-link-row">
+          <span class="crowd-link-label">Gig code</span>
+          <span id="follower-gig-code" class="gig-status-code">—</span>
+        </div>
         <div class="crowd-link-status" id="follower-link-status"></div>
         <div id="follower-roster"></div>
-      </div>
-
-      <div id="gig-caps-panel" class="hidden">
-        <h3>Nightly Request Cap<span class="info-wrap"><button type="button" class="info-icon" aria-label="More info">i</button><div class="info-popover hidden">Once a song has been requested this many times, the crowd page blocks new requests for it (with a friendly message) until you start a new gig, or hit "Reset" below. Leave blank for no limit. Carries over from your last gig automatically — tweak as needed for tonight.</div></span></h3>
-        <div class="gig-cap-row">
-          <div>
-            <div class="gig-cap-title">Max requests per song</div>
-            <div class="gig-cap-artist">Applies to every song in tonight's gig equally.</div>
-          </div>
-          <input type="number" min="1" step="1" id="gig-cap-input" placeholder="No limit" />
-        </div>
-        <div class="gig-cap-row">
-          <div>
-            <div class="gig-cap-title">Cooldown after playing (minutes)</div>
-            <div class="gig-cap-artist">Once you tap "Got it — play the song," the crowd can't re-request or boost it again until this many minutes pass. Leave blank for no cooldown.</div>
-          </div>
-          <input type="number" min="1" step="1" id="gig-cooldown-input" placeholder="No cooldown" />
-        </div>
-        <div class="button-row">
-          <button class="secondary" id="save-gig-caps-btn">Save for Tonight</button>
-          <button class="secondary" id="reset-gig-caps-btn">Reset Request Counts</button>
-        </div>
-        <div class="manage-song-status" id="gig-caps-status"></div>
       </div>
 
       <div id="last-call-panel" class="hidden">
@@ -758,7 +733,7 @@
     <div class="tab-panel" data-tab-panel="setlists">
 
     <section>
-      <h2>Build a Setlist<span class="info-wrap"><button type="button" class="info-icon" aria-label="More info">i</button><div class="info-popover hidden">Search and add songs on the left. They land in order on the right — use the arrows to rearrange.</div></span></h2>
+      <h2>Build a Setlist<span class="info-wrap"><button type="button" class="info-icon" aria-label="More info">i</button><div class="info-popover hidden">Search and add songs on the left. They land in order on the right — use the arrows to rearrange, or type a new position number directly (e.g. change song 16 to "1" and everything else shifts down automatically).</div></span></h2>
 
       <div id="editing-banner" class="hidden"></div>
 
@@ -794,7 +769,7 @@
     <div class="tab-panel" data-tab-panel="library">
 
     <section>
-      <h2>Add a Song<span class="info-wrap"><button type="button" class="info-icon" aria-label="More info">i</button><div class="info-popover hidden">Upload the chart PDF right here — we'll send it to your Wasabi bucket for you. (You can still paste a URL instead if you've already hosted it somewhere.)</div></span></h2>
+      <h2>Add a Song<span class="info-wrap"><button type="button" class="info-icon" aria-label="More info">i</button><div class="info-popover hidden">Upload the chart PDF right here and we'll host it. (You can still paste a URL instead if you've already hosted it somewhere else.)</div></span></h2>
       <input type="text" id="new-song-title" placeholder="Song title" />
       <input type="text" id="new-song-artist" placeholder="Artist" />
       <input type="text" id="new-song-key" placeholder="Key, e.g. 'G'" />
@@ -855,6 +830,10 @@
         <input type="date" id="report-range-end" style="margin-bottom:0;" />
         <button class="secondary" id="report-range-apply-btn">Apply</button>
       </div>
+      <div class="button-row">
+        <button class="secondary" id="export-report-csv-btn">Export CSV</button>
+      </div>
+      <div class="button-caption">Every request in the range above, one row each — song, tip, gig, status. Raw data for your own spreadsheet.</div>
     </section>
 
     <section>
@@ -877,6 +856,29 @@
     </div>
 
     <div class="tab-panel" data-tab-panel="settings">
+
+    <section id="gig-caps-panel" class="hidden">
+      <h2>Nightly Request Cap<span class="info-wrap"><button type="button" class="info-icon" aria-label="More info">i</button><div class="info-popover hidden">Once a song has been requested this many times, the crowd page blocks new requests for it (with a friendly message) until you start a new gig, or hit "Reset" below. Leave blank for no limit. Lives here since it's something you'll rarely need to change — carries over from your last gig automatically, and "Save for Tonight" still only affects tonight's gig, not future ones.</div></span></h2>
+      <div class="gig-cap-row">
+        <div>
+          <div class="gig-cap-title">Max requests per song</div>
+          <div class="gig-cap-artist">Applies to every song in tonight's gig equally.</div>
+        </div>
+        <input type="number" min="1" step="1" id="gig-cap-input" placeholder="No limit" />
+      </div>
+      <div class="gig-cap-row">
+        <div>
+          <div class="gig-cap-title">Cooldown after playing (minutes)</div>
+          <div class="gig-cap-artist">Once you tap "Got it — play the song," the crowd can't re-request or boost it again until this many minutes pass. Leave blank for no cooldown.</div>
+        </div>
+        <input type="number" min="1" step="1" id="gig-cooldown-input" placeholder="No cooldown" />
+      </div>
+      <div class="button-row">
+        <button class="secondary" id="save-gig-caps-btn">Save for Tonight</button>
+        <button class="secondary" id="reset-gig-caps-btn">Reset Request Counts</button>
+      </div>
+      <div class="manage-song-status" id="gig-caps-status"></div>
+    </section>
 
     <section>
       <h2>Default Song Length<span class="info-wrap"><button type="button" class="info-icon" aria-label="More info">i</button><div class="info-popover hidden">Applies to your whole account, not just tonight — used by Last Call whenever a song in Song Library has no estimated-minutes override of its own.</div></span></h2>
@@ -948,6 +950,7 @@
   const startSetBtn = document.getElementById('start-set-btn');
   const followerLinkPanel = document.getElementById('follower-link-panel');
   const followerJoinLinkUrlEl = document.getElementById('follower-join-link-url');
+  const followerGigCodeEl = document.getElementById('follower-gig-code');
   const copyFollowerLinkBtn = document.getElementById('copy-follower-link-btn');
   const followerLinkStatus = document.getElementById('follower-link-status');
   const followerRosterEl = document.getElementById('follower-roster');
@@ -1025,6 +1028,7 @@
   const reportRangeStart = document.getElementById('report-range-start');
   const reportRangeEnd = document.getElementById('report-range-end');
   const reportRangeApplyBtn = document.getElementById('report-range-apply-btn');
+  const exportReportCsvBtn = document.getElementById('export-report-csv-btn');
   const followedGigsSection = document.getElementById('followed-gigs-section');
   const followedGigsSummaryEl = document.getElementById('followed-gigs-summary');
   const followedGigsListEl = document.getElementById('followed-gigs-list');
@@ -1033,6 +1037,8 @@
   let allReportingRequests = [];
   let allFollowedGigs = [];       // item 24, second half: gigs THIS performer joined as a Follower
   let allFollowedGigRequests = [];
+  let currentFilteredGigs = [];   // whatever applyReportingFilter() last computed — Export CSV reads these
+  let currentFilteredRequests = [];
 
 
   // ---------------- Auth ----------------
@@ -1158,6 +1164,7 @@
     const url = `${window.location.origin}/viewer.html?join=${activeGig.gig_code}`;
     followerJoinLinkUrlEl.textContent = url;
     followerJoinLinkUrlEl.href = url;
+    followerGigCodeEl.textContent = activeGig.gig_code;
   }
 
   copyFollowerLinkBtn.addEventListener('click', async () => {
@@ -1539,7 +1546,7 @@
       const artist = s ? s.artist : '';
       return `
         <div class="song-row-item">
-          <span class="order-num">${i + 1}.</span>
+          <input type="number" class="order-num-input" min="1" max="${builderSongIds.length}" value="${i + 1}" data-reorder="${id}" />
           <span style="flex:1;">
             <div>${escapeHtml(title)}</div>
             <div class="artist">${escapeHtml(artist)}</div>
@@ -1553,6 +1560,20 @@
       `;
     }).join('');
 
+    selectedListEl.querySelectorAll('[data-reorder]').forEach(input => {
+      input.addEventListener('change', () => {
+        const id = input.getAttribute('data-reorder');
+        const oldIndex = builderSongIds.indexOf(id);
+        let newIndex = parseInt(input.value, 10) - 1;
+        if (isNaN(newIndex)) newIndex = oldIndex;
+        newIndex = Math.max(0, Math.min(builderSongIds.length - 1, newIndex));
+        if (newIndex !== oldIndex) {
+          builderSongIds.splice(oldIndex, 1);
+          builderSongIds.splice(newIndex, 0, id);
+        }
+        renderSelectedList();
+      });
+    });
     selectedListEl.querySelectorAll('[data-up]').forEach(btn => {
       btn.addEventListener('click', () => {
         const id = btn.getAttribute('data-up');
@@ -2658,6 +2679,8 @@
     }
     const gigIds = new Set(gigs.map(g => g.id));
     const requests = allReportingRequests.filter(r => gigIds.has(r.gig_session_id));
+    currentFilteredGigs = gigs;
+    currentFilteredRequests = requests;
 
     lifetimeSummaryHeadingEl.textContent = `Totals — ${reportRangeLabel()}`;
     renderReporting(gigs, requests);
@@ -2683,6 +2706,48 @@
     if (reportRangeSelect.value !== 'custom') applyReportingFilter();
   });
   reportRangeApplyBtn.addEventListener('click', applyReportingFilter);
+
+  // ---------------- Export CSV ----------------
+  // Whatever applyReportingFilter() last computed for the range picker
+  // above — one row per real crowd request, gig info joined in by id.
+  // Simple/raw on purpose: Travis parses it himself afterward, so no
+  // formatting or aggregation happens here beyond what's already computed
+  // for the on-screen report.
+  function csvEscape(value) {
+    const s = value === null || value === undefined ? '' : String(value);
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }
+
+  function downloadCsv(filename, headers, rows) {
+    const lines = [headers, ...rows].map(row => row.map(csvEscape).join(',')).join('\n');
+    const blob = new Blob([lines], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  exportReportCsvBtn.addEventListener('click', () => {
+    const gigById = new Map(currentFilteredGigs.map(g => [g.id, g]));
+    const headers = ['Gig Date', 'Gig Code', 'Song Title', 'Artist', 'Tip Amount', 'Status', 'Played'];
+    const rows = currentFilteredRequests.map(r => {
+      const g = gigById.get(r.gig_session_id);
+      return [
+        g ? g.created_at : '',
+        g ? g.gig_code : '',
+        r.song_title || '',
+        r.song_artist || '',
+        Number(r.tip_amount || 0).toFixed(2),
+        r.status,
+        r.spliced_at ? 'Yes' : 'No'
+      ];
+    });
+    downloadCsv(`btb-report-${reportRangeSelect.value}-${Date.now()}.csv`, headers, rows);
+  });
 
   function renderReporting(gigs, requests) {
     // ---- Lifetime totals ----
