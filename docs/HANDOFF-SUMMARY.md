@@ -40,17 +40,18 @@ Every prior session (running in Cowork/chat, not Claude Code) hit a sandbox rest
 Travis had mentioned waiting on "admin to re-enable access," which was never clarified in the moment. **Resolved**: this referred to Travis's own Claude subscription access, not anything in this project — a billing/credit-card issue that the org's admin fixed. Not staging-related; no longer worth tracking here.
 
 ## Docs in this folder
-Originally exported from the claude.ai Project "Song Request and Tip App," then kept locally in Dropbox, then **moved into this git repo's `docs/` folder 2026-08-29** — see the note below. All 10 numbered docs plus this summary:
+Originally exported from the claude.ai Project "Song Request and Tip App," then kept locally in Dropbox, then **moved into this git repo's `docs/` folder 2026-08-29** — see the note below. All 11 numbered docs plus this summary:
 - `00-PROJECT-OVERVIEW.md` — original prototype-era overview (superseded in substance by `01-...`, kept for history)
 - `01-ARCHITECTURE-AND-DATA-MODEL.md` — **the most important file**: full current architecture, data model, every feature built and why, Wade's security doctrine
 - `02-SONG-DATABASE.md` — where Travis's chart library lives, the 50-song approved list
 - `03-V2-BACKLOG.md` — deferred features, not yet prioritized
 - `04-DECISIONS-AND-OPEN-QUESTIONS.md` — **second most important file**: full session-by-session history of every decision, bug found, and fix, in chronological order
 - `05-SIGNUP-SCOPE.md` — self-service signup: Phase 1 (free signup) **confirmed deployed and working on both environments 2026-09-08**; billing/affiliate payouts/device enforcement still not built (see that doc for phase detail)
-- `06-OWNERS-GUIDE-NOTES.md` — outline for an eventual "how Travis runs the business" ops manual (not written yet)
+- `06-OWNERS-GUIDE-NOTES.md` — outline for an eventual "how Travis runs the business" ops manual (not written yet) — much of this is expected to shrink once the Owner Console (item 10 below) exists
 - `07-STAGING-ENVIRONMENT-SETUP.md` — the staging build currently in progress (see above)
 - `08-PERFORMER-FAQ-TUTORIAL-NOTES.md` — running list of customer-facing FAQ/tutorial topics to write later (not started)
 - `09-CONNECT-EXPRESS-SCOPE.md` — Stripe Connect Express plan (self-serve per-performer payouts, the 10% platform fee) — **built, tested, and ported to production 2026-09-11**
+- `10-OWNER-CONSOLE-SCOPE.md` — a local-only (never publicly deployed) admin tool: performer/affiliate management, cross-performer revenue and affiliate-commission reporting, pulling from both Supabase (via service_role) and Stripe — **scoped 2026-09-11, not built yet**
 - `2-hour-setlist.md` — a sample setlist built from the approved song database
 - `gig-request-prototype.html` — the very first single-file prototype, superseded, kept only as a UX reference
 
