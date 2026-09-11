@@ -3,50 +3,315 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Bribe The Band</title>
+<title>Bribe The Band — Live song requests &amp; tips</title>
+<meta name="description" content="Turn your crowd's phones into a request line and a tip jar. Live, tip-weighted queue and swipe-through PDF charts that run right on your tablet.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,400;6..96,600;6..96,700&family=Inter:wght@400;500;600;700;800&display=swap">
 <style>
+  :root {
+    --bg: #0E0C0A;
+    --surface: #2A2622;
+    --surface-2: #160F0C;
+    --text: #F4E4C8;
+    --gold: #D4A017;
+    --rust: #8B2E1F;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
   body {
     margin: 0;
-    min-height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: #12141c;
-    color: #f4f4f6;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    text-align: center;
-    padding: 20px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    overflow-x: hidden;
   }
-  h1 { font-size: 2rem; margin-bottom: 10px; }
-  p { color: #9a9db0; max-width: 420px; margin: 0 auto 24px; line-height: 1.5; }
-  a.btn {
+  a { color: var(--gold); text-decoration: none; }
+  a:hover { color: var(--text); }
+  h1, h2, h3 { font-family: 'Bodoni Moda', serif; font-weight: 700; margin: 0; }
+  img { max-width: 100%; }
+  .wrap { max-width: 1296px; margin: 0 auto; padding: 0 72px; }
+  section { padding: 100px 72px; border-top: 1px solid #2A2622; }
+  @media (max-width: 900px) {
+    .wrap { padding: 0 24px; }
+    section { padding: 64px 24px; }
+  }
+
+  .btn-primary {
     display: inline-block;
-    background: #f2b134;
-    color: #12141c;
-    text-decoration: none;
+    background: var(--gold);
+    color: var(--bg) !important;
     font-weight: 700;
-    padding: 12px 22px;
-    border-radius: 8px;
-    margin: 6px;
+    font-size: 15px;
+    padding: 14px 26px;
+    border-radius: 3px;
+    white-space: nowrap;
   }
-  a.link {
-    display: block;
-    color: #9a9db0;
-    margin-top: 14px;
-    font-size: 0.9rem;
+  .btn-primary:hover { opacity: 0.88; }
+
+  /* NAV */
+  .nav {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 24px 72px; position: relative; z-index: 20;
+  }
+  .nav-logo { display: flex; align-items: center; gap: 10px; }
+  .nav-logo-text { font-family: 'Bodoni Moda', serif; font-weight: 700; font-size: 22px; letter-spacing: 0.5px; color: var(--text); }
+  .nav-links { display: flex; align-items: center; gap: 36px; }
+  .nav-link { font-size: 14px; font-weight: 500; color: rgba(244,228,200,0.65); }
+  .nav-link.active { font-weight: 600; color: var(--gold); }
+  .nav-toggle {
+    display: none; background: none; border: none; color: var(--text);
+    font-size: 26px; line-height: 1; cursor: pointer; padding: 4px 8px;
+  }
+  @media (max-width: 900px) {
+    .nav { padding: 20px 24px; }
+    .nav-links {
+      display: none;
+      position: absolute; top: 100%; left: 0; right: 0;
+      background: var(--surface); flex-direction: column; align-items: stretch;
+      padding: 8px 24px 20px; gap: 2px; border-bottom: 1px solid rgba(212,160,23,0.2);
+    }
+    .nav-links.open { display: flex; }
+    .nav-link { padding: 14px 0; border-bottom: 1px solid rgba(244,228,200,0.08); }
+    .nav-links .btn-primary { margin-top: 12px; text-align: center; }
+    .nav-toggle { display: block; }
+  }
+
+  /* FOOTER */
+  .site-footer {
+    padding: 36px 72px; display: flex; align-items: center; justify-content: space-between;
+    border-top: 1px solid #2A2622; flex-wrap: wrap; gap: 12px;
+  }
+  .site-footer-brand { display: flex; align-items: center; gap: 8px; }
+  .site-footer-brand-text { font-family: 'Bodoni Moda', serif; font-weight: 700; font-size: 16px; color: rgba(244,228,200,0.5); }
+  .site-footer-copy { font-size: 13px; color: rgba(244,228,200,0.4); }
+  @media (max-width: 900px) { .site-footer { padding: 28px 24px; } }
+
+  /* HERO */
+  .hero { position: relative; padding: 88px 72px 100px; text-align: center; }
+  .hero-glow {
+    position: absolute; top: -140px; left: 50%; transform: translateX(-50%);
+    width: 900px; height: 640px; max-width: 200vw;
+    background: radial-gradient(ellipse at center, rgba(212,160,23,0.35) 0%, rgba(212,160,23,0.12) 40%, rgba(212,160,23,0) 72%);
+    filter: blur(6px); pointer-events: none;
+  }
+  .hero-inner { position: relative; z-index: 2; max-width: 800px; margin: 0 auto; }
+  .eyebrow {
+    display: inline-block; font-size: 13px; font-weight: 600; letter-spacing: 1.5px;
+    text-transform: uppercase; color: var(--gold); border: 1px solid rgba(212,160,23,0.4);
+    border-radius: 20px; padding: 7px 16px; margin-bottom: 28px;
+  }
+  .hero h1 { font-size: 64px; line-height: 1.08; margin: 0 0 24px; }
+  .hero p.lede { font-size: 19px; line-height: 1.6; color: rgba(244,228,200,0.72); margin: 0 0 40px; }
+  .hero-ctas { display: flex; align-items: center; justify-content: center; gap: 20px; flex-wrap: wrap; }
+  .hero-ctas .btn-primary { font-size: 16px; padding: 15px 30px; }
+  .link-underline { font-size: 15px; font-weight: 600; color: var(--text); border-bottom: 1px solid rgba(244,228,200,0.35); padding-bottom: 2px; }
+  @media (max-width: 640px) {
+    .hero { padding: 56px 24px 72px; }
+    .hero h1 { font-size: 38px; }
+    .hero p.lede { font-size: 17px; }
+  }
+
+  /* HOW IT WORKS (3 steps) */
+  .steps-grid { display: flex; gap: 48px; }
+  .step { flex: 1; display: flex; flex-direction: column; gap: 18px; }
+  .step-label { font-size: 13px; font-weight: 700; letter-spacing: 1px; color: var(--rust); }
+  .step h3 { font-size: 20px; font-weight: 600; }
+  .step p { font-size: 15px; line-height: 1.6; color: rgba(244,228,200,0.65); margin: 0; }
+  h2.section-title { font-size: 34px; margin: 0 0 56px; text-align: left; }
+  @media (max-width: 900px) {
+    .steps-grid { flex-direction: column; gap: 40px; }
+    h2.section-title { font-size: 26px; margin-bottom: 36px; }
+  }
+
+  /* SHOWCASE */
+  .showcase-grid { display: flex; gap: 32px; }
+  .showcase-card {
+    flex: 1; background: var(--surface); border-radius: 6px; padding: 32px;
+    border: 1px solid rgba(212,160,23,0.15); min-width: 0;
+  }
+  .showcase-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; gap: 10px; flex-wrap: wrap; }
+  .showcase-label { font-size: 13px; font-weight: 700; letter-spacing: 1px; color: rgba(244,228,200,0.5); text-transform: uppercase; }
+  .lastcall-badge {
+    display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; color: var(--text);
+    background: rgba(139,46,31,0.35); padding: 5px 10px; border-radius: 12px; white-space: nowrap;
+  }
+  .lastcall-dot { width: 8px; height: 8px; border-radius: 50%; animation: lastcall 2.5s ease-in-out infinite alternate; }
+  @keyframes lastcall { 0% { background: var(--gold); } 100% { background: var(--rust); } }
+  .queue-row {
+    display: flex; align-items: center; justify-content: space-between; background: var(--bg);
+    border-radius: 4px; padding: 14px 16px; border: 1px solid var(--gold);
+  }
+  .queue-row-title { font-size: 14px; font-weight: 600; color: var(--text); }
+  .queue-row-sub { font-size: 12px; color: rgba(244,228,200,0.5); }
+  .boost-pill { font-size: 12.5px; font-weight: 700; color: var(--gold); background: rgba(212,160,23,0.12); padding: 5px 10px; border-radius: 10px; }
+  .catalog-hint { font-size: 13px; font-weight: 600; color: rgba(244,228,200,0.55); margin: 16px 0 10px; }
+  .song-row { display: flex; align-items: center; justify-content: space-between; background: var(--bg); border-radius: 4px; padding: 14px 16px; flex-wrap: wrap; gap: 8px; }
+  .tip-chip { font-size: 11.5px; font-weight: 700; color: var(--bg); background: var(--gold); padding: 5px 9px; border-radius: 10px; }
+  .tip-chip.outline { color: var(--text); background: transparent; border: 1px solid rgba(244,228,200,0.25); }
+  .showcase-note { font-size: 14px; line-height: 1.6; color: rgba(244,228,200,0.6); margin: 22px 0 0; }
+  .bell-wrap { position: relative; width: 26px; height: 26px; border-radius: 50%; background: var(--bg); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .bell-badge { position: absolute; top: -4px; right: -4px; width: 14px; height: 14px; border-radius: 50%; background: var(--gold); color: var(--bg); font-size: 9px; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+  .tablet-card { background: var(--bg); border-radius: 4px; padding: 16px 18px 20px; }
+  .tablet-title { font-size: 13.5px; font-weight: 700; color: var(--text); }
+  .tablet-sub { font-size: 11px; color: rgba(244,228,200,0.5); margin-top: 2px; }
+  .tablet-chart { width: 100%; height: 130px; border-radius: 3px; margin: 12px 0; overflow: hidden; background: #1A1714; }
+  .tablet-chart img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: top; }
+  .tablet-meta { display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 11.5px; color: rgba(244,228,200,0.45); flex-wrap: wrap; text-align: center; }
+  @media (max-width: 900px) { .showcase-grid { flex-direction: column; } }
+
+  /* FOUNDER / PRICING BAND */
+  .founder { background: var(--surface-2); }
+  .founder-inner { max-width: 920px; margin: 0 auto; }
+  .founder h2 { font-size: 30px; margin: 0 0 20px; }
+  .founder p { font-size: 16px; line-height: 1.7; color: rgba(244,228,200,0.72); margin: 0 0 32px; }
+  .founder-cta {
+    display: flex; align-items: center; justify-content: space-between; gap: 20px;
+    padding-top: 28px; border-top: 1px solid rgba(244,228,200,0.12); flex-wrap: wrap;
+  }
+  .founder-cta p { font-size: 15px; color: rgba(244,228,200,0.65); margin: 0; max-width: 480px; }
+  @media (max-width: 640px) {
+    .founder h2 { font-size: 24px; }
+    .founder-cta { justify-content: center; text-align: center; }
   }
 </style>
 </head>
 <body>
-  <div>
-    <h1>🎤 Bribe The Band</h1>
-    <p>
-      Take song requests and tips live at your gigs. This page is a
-      placeholder for now — the full landing page is coming once the
-      product itself is finished and proven out.
-    </p>
-    <a class="btn" href="/travis-ross">See a live example</a>
-    <a class="link" href="/console.html">Performer log in</a>
+
+<div class="nav">
+  <div class="nav-logo">
+    <svg width="28" height="28" viewBox="0 0 100 100"><defs><radialGradient id="navGlow" cx="50%" cy="42%" r="55%"><stop offset="0%" stop-color="#D4A017" stop-opacity="0.65"></stop><stop offset="55%" stop-color="#D4A017" stop-opacity="0.18"></stop><stop offset="100%" stop-color="#D4A017" stop-opacity="0"></stop></radialGradient></defs><circle cx="50" cy="42" r="34" fill="url(#navGlow)"></circle><rect x="41" y="18" width="18" height="32" rx="9" fill="#F4E4C8"></rect><path d="M32 46a18 18 0 0036 0" stroke="#F4E4C8" stroke-width="3" fill="none" stroke-linecap="round"></path><line x1="50" y1="64" x2="50" y2="76" stroke="#F4E4C8" stroke-width="3" stroke-linecap="round"></line><line x1="39" y1="76" x2="61" y2="76" stroke="#F4E4C8" stroke-width="3" stroke-linecap="round"></line></svg>
+    <div class="nav-logo-text">Bribe <span style="color:#D4A017;">The Band</span></div>
   </div>
+  <button class="nav-toggle" id="navToggle" aria-label="Menu" aria-expanded="false">☰</button>
+  <div class="nav-links" id="navLinks">
+    <a class="nav-link" href="/how-it-works">How it works</a>
+    <a class="nav-link" href="/features">The product</a>
+    <a class="nav-link" href="/console.html">Performer log in</a>
+    <a class="btn-primary" href="/get-started">Start your gig page</a>
+  </div>
+</div>
+
+<div class="hero">
+  <div class="hero-glow"></div>
+  <div class="hero-inner">
+    <div class="eyebrow">Live at real gigs since Aug 2026</div>
+    <h1>Song requests, tips, and charts all at your fingertips in real-time as you perform.</h1>
+    <p class="lede">Bribe The Band turns your crowd's phones into a request line and a tip jar — with a live, tip-weighted queue and swipe-through PDF charts that run right on your tablet and sync with your band all while you play.</p>
+    <div class="hero-ctas">
+      <a class="btn-primary" href="/get-started">Start your gig page</a>
+      <a class="link-underline" href="/travis-ross">See a live crowd page →</a>
+    </div>
+  </div>
+</div>
+
+<section id="how">
+  <div class="wrap">
+    <h2 class="section-title">Three steps. No app for the crowd.</h2>
+    <div class="steps-grid">
+      <div class="step">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#D4A017" stroke-width="1.8"><path d="M9 15l6-6"></path><path d="M8 9a4 4 0 015.657 0l1 1a4 4 0 010 5.657l-2 2"></path><path d="M16 15a4 4 0 01-5.657 0l-1-1a4 4 0 010-5.657l2-2"></path></svg>
+        <div class="step-label">STEP ONE</div>
+        <h3>Share your link</h3>
+        <p>Display your crowd page QR code from the stage or share the link straight up. No app to download, no login for the crowd. Only show them the songs you're ready to perform.</p>
+      </div>
+      <div class="step">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#D4A017" stroke-width="1.8"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>
+        <div class="step-label">STEP TWO</div>
+        <h3>They request, and tip</h3>
+        <p>The crowd picks a song, leaves a note, tips what it's worth. Other fans can boost it to move it up in the queue. Money lands straight in your own account — nothing pools, nothing waits.</p>
+      </div>
+      <div class="step">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#D4A017" stroke-width="1.8"><path d="M12 15a3 3 0 003-3V6a3 3 0 00-6 0v6a3 3 0 003 3z"></path><path d="M19 11a7 7 0 01-14 0"></path><path d="M12 18v3M9 21h6"></path></svg>
+        <div class="step-label">STEP THREE</div>
+        <h3>You run the queue</h3>
+        <p>Requests stack up tip-weighted on your tablet with the chart already attached. Swipe through your own PDF charts the same way you already do — the requests wait until you tap it. It then drops the requested song's chart as your next swipe.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="showcase" style="border-top: none; padding-top: 20px;">
+  <div class="wrap">
+    <div class="showcase-grid">
+      <div class="showcase-card">
+        <div class="showcase-head">
+          <div class="showcase-label">Crowd page</div>
+          <div class="lastcall-badge"><span class="lastcall-dot"></span> ⏰ LAST CALL — CLOSING SOON</div>
+        </div>
+        <div style="font-size:13.5px; font-weight:700; color:#D4A017; margin-bottom:10px;">🔥 Requested Songs In Queue</div>
+        <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:16px;">
+          <div class="queue-row">
+            <div>
+              <div class="queue-row-title">Landslide</div>
+              <div class="queue-row-sub">$15 in queue</div>
+            </div>
+            <div class="boost-pill">⬆️ Boost</div>
+          </div>
+        </div>
+        <div class="catalog-hint">Here's a list of curated songs selected for you to request.</div>
+        <div class="song-row">
+          <div>
+            <div class="queue-row-title">Fast Car</div>
+            <div class="queue-row-sub">Tracy Chapman</div>
+          </div>
+          <div style="display:flex; gap:6px;">
+            <span class="tip-chip">$5</span>
+            <span class="tip-chip outline">Custom</span>
+          </div>
+        </div>
+        <p class="showcase-note">Song title and artist only — keys and charts stay performer-side, where they belong.</p>
+      </div>
+
+      <div class="showcase-card">
+        <div class="showcase-head">
+          <div class="showcase-label">Your tablet, mid-song</div>
+          <div class="bell-wrap">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#D4A017" stroke-width="2"><path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+            <div class="bell-badge">2</div>
+          </div>
+        </div>
+        <div class="tablet-card">
+          <div class="tablet-title">All the Small Things</div>
+          <div class="tablet-sub">Blink-182 — C</div>
+          <div class="tablet-chart"><img src="/design-assets/chart-preview.png" alt="Chart preview"></div>
+          <div class="tablet-meta">
+            <span>Song 4 of 8 · Page 1 of 2</span><span>·</span><span>swipe, click the sides, or ← →</span>
+          </div>
+        </div>
+        <p class="showcase-note">Swipe through your own PDF charts mid-song — the request drawer stays out of your way until you tap it, then it's "Got it — play the song" and back to the set.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="founder">
+  <div class="founder-inner">
+    <h2>Built on an actual stage, not a whiteboard.</h2>
+    <p>Bribe The Band started as one performer's fix for his own gigs — replacing a paper songbook and a literal tip jar with something his crowd could use from their phones and he could run from his tablet without having to say no to songs he didn't know or manually search for songs he did. He's been using it for both his solo gigs as well as his 5-piece band. It's been bringing in real requests and real tips at real shows since August 2026.</p>
+    <div class="founder-cta">
+      <p>Free to sign up. We take 10% of tips — no monthly fee, nothing else.</p>
+      <a class="btn-primary" href="/get-started">Start your gig page</a>
+    </div>
+  </div>
+</section>
+
+<div class="site-footer">
+  <div class="site-footer-brand">
+    <svg width="18" height="18" viewBox="0 0 100 100" opacity="0.6"><circle cx="50" cy="42" r="34" fill="#D4A017" opacity="0.2"></circle><rect x="41" y="18" width="18" height="32" rx="9" fill="#F4E4C8"></rect><path d="M32 46a18 18 0 0036 0" stroke="#F4E4C8" stroke-width="4" fill="none" stroke-linecap="round"></path><line x1="50" y1="64" x2="50" y2="76" stroke="#F4E4C8" stroke-width="4" stroke-linecap="round"></line><line x1="39" y1="76" x2="61" y2="76" stroke="#F4E4C8" stroke-width="4" stroke-linecap="round"></line></svg>
+    <div class="site-footer-brand-text">Bribe The Band</div>
+  </div>
+  <div class="site-footer-copy">© 2026 · Built by a working musician</div>
+</div>
+
+<script>
+  var navToggle = document.getElementById('navToggle');
+  var navLinks = document.getElementById('navLinks');
+  navToggle.addEventListener('click', function () {
+    var isOpen = navLinks.classList.toggle('open');
+    navToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    navToggle.textContent = isOpen ? '✕' : '☰';
+  });
+</script>
+
 </body>
 </html>

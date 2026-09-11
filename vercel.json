@@ -1,6 +1,9 @@
 {
   "rewrites": [
     { "source": "/signup", "destination": "/signup.html" },
+    { "source": "/how-it-works", "destination": "/how-it-works.html" },
+    { "source": "/features", "destination": "/features.html" },
+    { "source": "/get-started", "destination": "/get-started.html" },
     { "source": "/:handle", "destination": "/request.html" }
   ]
 }
