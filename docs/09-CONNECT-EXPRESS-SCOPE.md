@@ -1,6 +1,6 @@
 # Stripe Connect Express — Scope & Plan
 
-Status: **Not built. Scoped 2026-09-10**, prompted by the new marketing site needing honest copy about how a new performer actually gets paid — today's answer is "they reach out and Travis sets it up by hand," and this doc is the plan for replacing that with real self-serve onboarding. See `04-DECISIONS-AND-OPEN-QUESTIONS.md` item 23 for the monetization numbers this scope builds toward (10% platform fee taken off the top, perpetual affiliate commission by default — both "working numbers, not a permanent commitment," Travis's own words).
+Status: **Built and confirmed working end-to-end on staging, 2026-09-10** — build order steps 1-3 below are done; step 4 (port to production) is still open. Scoped 2026-09-10, prompted by the new marketing site needing honest copy about how a new performer actually gets paid — today's answer is "they reach out and Travis sets it up by hand," and this doc is the plan for replacing that with real self-serve onboarding. See `04-DECISIONS-AND-OPEN-QUESTIONS.md` item 23/36 for the monetization numbers this scope builds toward (10% platform fee taken off the top, perpetual affiliate commission by default — both "working numbers, not a permanent commitment," Travis's own words) and the full build/test narrative.
 
 ## Why this exists
 
@@ -65,9 +65,23 @@ Stays on the current direct integration, permanently, as the house account at 0%
 
 ## Open decisions before writing any code
 
-- What exactly does a crowd member see if they try to tip a performer who hasn't connected Stripe yet — a hard block with a message, or something softer?
-- Does a brand-new signup get nudged toward connecting Stripe right at signup, or only when they're about to run a real gig? Affects whether the "Payouts" prompt is front-and-center on first login or something they find in Settings when they need it.
+- ~~What exactly does a crowd member see if they try to tip a performer who hasn't connected Stripe yet — a hard block with a message, or something softer?~~ **Resolved, built**: a hard block ("This performer hasn't set up payouts yet — tips can't be sent right now"), per this doc's own recommendation above — no unsplit fallback charge into the platform account.
+- Does a brand-new signup get nudged toward connecting Stripe right at signup, or only when they're about to run a real gig? Affects whether the "Payouts" prompt is front-and-center on first login or something they find in Settings when they need it. **Still open** — not blocking, since Settings already surfaces it for the one real performer (Travis's own `travis-ross-test`) using this today.
+
+## Built and tested on staging — 2026-09-10
+
+Built exactly as scoped above, with one addition beyond this doc's original spec:
+
+- **`is_house_account` (boolean, default `false`) added to `performers`**, rather than inferring "exempt from Connect" from a null `stripe_account_id` — needed once it came time to actually write `create-payment-intent.js`'s branch, since a real performer who hasn't onboarded yet also has a null `stripe_account_id` and has to be blocked, not treated as exempt. Set `true` for the `travis-ross` handle only. `get_performer_payout_info()` returns it alongside `stripe_account_id`/`fee_percentage`.
+- **`requests.platform_fee_amount` (numeric, nullable) added**, recording the actual `application_fee_amount` Stripe charged per request (in dollars, matching `tip_amount`'s convention) — the "useful the moment there's more than one performer taking real tips" addition this doc's Webhook section already called for, done now rather than deferred.
+- Migrations: `migration-stripe-connect-v1.sql` (schema + the three RPC functions) and `migration-stripe-connect-v2.sql` (`is_house_account` + the `get_performer_payout_info()` reshape + `platform_fee_amount`). Both run on staging, no errors.
+
+**Onboarding tested hands-on**, real Stripe-hosted Express flow, `travis-ross-test`'s own account: Connect had to be enabled on the correct Stripe sandbox account first (Stripe's newer "sandboxes" are separate from classic Test mode, each with their own API keys — confirmed the sandbox already wired into staging's `STRIPE_SECRET_KEY` was the right one before touching anything), business model classified as "Marketplace," and "Accounts v1 support" enabled via Stripe's own dashboard toggle (freshly-Connect-enabled accounts default to blocking the older `stripe.accounts.create()` v1 call this app uses). Test identity data (test SSN, test bank account) taken through Stripe's hosted onboarding UI; the account briefly showed "restricted" after submission because the **full** SSN/ITIN field (not just the last-4 shown earlier in the flow) still needed re-entry to clear identity verification — resolved, account reached "Verified"/"Connected" status.
+
+**Fee-split payment flow tested hands-on**, two real test-mode tips against the now-connected `travis-ross-test` account ($10 and $5, test card `4242 4242 4242 4242`) through the actual crowd page: both created a destination-charge PaymentIntent (`transfer_data.destination` + `application_fee_amount`, not the house-account direct-charge path, since `travis-ross-test` is a real performer, not the house account), both confirmed successfully client-side, and both were correctly recorded by the existing webhook (visible as pending requests in the console's Request Activity list with the right dollar amounts). Confirms the whole pipeline — onboarding → connected account → split charge → webhook record — works end to end on staging.
+
+**Noted, not investigated further**: the Reporting tab's "Total tips" All-Time widget only incremented by one of the two test tips' amounts even though both tips are correctly present as individual pending requests — looks like a pre-existing aggregation quirk unrelated to this build (the underlying rows are correct), worth a look separately.
 
 ## Related docs
-- `04-DECISIONS-AND-OPEN-QUESTIONS.md` item 23 — the monetization numbers and affiliate-mechanism decisions this scope builds on.
+- `04-DECISIONS-AND-OPEN-QUESTIONS.md` items 23/36 — the monetization numbers, affiliate-mechanism decisions, and full build/test session entry.
 - `05-SIGNUP-SCOPE.md` — the existing `promo_codes`/affiliate-attribution mechanism this reuses without modification.
