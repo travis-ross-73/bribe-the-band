@@ -3055,7 +3055,7 @@
     if (platformFee > 0) {
       lifetimeSummaryEl.innerHTML += `
         <div class="report-stat"><div class="report-stat-value">${formatMoney(platformFee)}</div><div class="report-stat-label">Platform fee taken</div></div>
-        <div class="report-stat"><div class="report-stat-value">${formatMoney(lifetimeTips - platformFee)}</div><div class="report-stat-label">Net payout (before Stripe processing)</div></div>
+        <div class="report-stat"><div class="report-stat-value">${formatMoney(lifetimeTips - platformFee)}</div><div class="report-stat-label">Net payout<span class="info-wrap"><button type="button" class="info-icon" aria-label="More info">i</button><div class="info-popover hidden">Total tips minus the platform's fee — but Stripe still takes its own card-processing fee (about 2.9% + 30&cent; per tip) out of your share before it hits your bank account. That fee isn't tracked here, so the real deposit will be a bit less than this number.</div></span></div></div>
       `;
     }
 
