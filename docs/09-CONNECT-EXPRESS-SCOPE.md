@@ -1,6 +1,6 @@
 # Stripe Connect Express — Scope & Plan
 
-Status: **Built and confirmed working end-to-end on staging, 2026-09-10** — build order steps 1-3 below are done; step 4 (port to production) is still open. Scoped 2026-09-10, prompted by the new marketing site needing honest copy about how a new performer actually gets paid — today's answer is "they reach out and Travis sets it up by hand," and this doc is the plan for replacing that with real self-serve onboarding. See `04-DECISIONS-AND-OPEN-QUESTIONS.md` item 23/36 for the monetization numbers this scope builds toward (10% platform fee taken off the top, perpetual affiliate commission by default — both "working numbers, not a permanent commitment," Travis's own words) and the full build/test narrative.
+Status: **Built, tested, and ported to production — done as of 2026-09-11.** All four build-order steps below are complete. Scoped 2026-09-10, prompted by the new marketing site needing honest copy about how a new performer actually gets paid — today's answer is "they reach out and Travis sets it up by hand," and this doc is the plan for replacing that with real self-serve onboarding. See `04-DECISIONS-AND-OPEN-QUESTIONS.md` item 23/36 for the monetization numbers this scope builds toward (10% platform fee taken off the top, perpetual affiliate commission by default — both "working numbers, not a permanent commitment," Travis's own words) and the full build/test/port narrative. **One real prerequisite still open, separate from this code/schema work**: Travis's live-mode Stripe account itself still needs Connect Program enrollment (the same one-time dashboard step done on the staging sandbox) before any second real performer can actually complete onboarding on production — not urgent today since he remains the only real performer (house account, exempt).
 
 ## Why this exists
 
@@ -58,10 +58,10 @@ Stays on the current direct integration, permanently, as the house account at 0%
 
 ## Build order
 
-1. Schema (three new `performers` columns) + `create-connect-account-link.js`/`check-connect-status.js` + the Settings-tab "Payouts" UI. Fully testable in isolation — no money moves yet.
-2. `create-payment-intent.js`'s fee-split logic — the one change that touches real charges.
-3. End-to-end test on staging with a real Stripe **test-mode** Express account (Stripe's test mode supports full Connect onboarding with fake identity/bank info, no real accounts needed).
-4. Port to production the same wholesale-copy way everything else has, with extra scrutiny before flipping it live — first time real money splits between two parties instead of landing in one account outright.
+1. ~~Schema (three new `performers` columns) + `create-connect-account-link.js`/`check-connect-status.js` + the Settings-tab "Payouts" UI. Fully testable in isolation — no money moves yet.~~ **Done.**
+2. ~~`create-payment-intent.js`'s fee-split logic — the one change that touches real charges.~~ **Done.**
+3. ~~End-to-end test on staging with a real Stripe **test-mode** Express account (Stripe's test mode supports full Connect onboarding with fake identity/bank info, no real accounts needed).~~ **Done, 2026-09-10** — see the build/test narrative below.
+4. ~~Port to production the same wholesale-copy way everything else has, with extra scrutiny before flipping it live — first time real money splits between two parties instead of landing in one account outright.~~ **Done, 2026-09-11.** Migrations run on production first (confirmed no errors), then the code cherry-picked onto a fresh branch off `main` and fast-forward merged — see `04-DECISIONS-AND-OPEN-QUESTIONS.md` item 36's port entry. Smoke-tested on the real production console (`travis-ross-test` login): Settings' Payouts section and Reporting both render correctly with no console errors, with zero real money moved (no gig started, no Stripe Connect enrollment attempted on live-mode).
 
 ## Open decisions before writing any code
 
