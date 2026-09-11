@@ -61,6 +61,10 @@ export default async function handler(req, res) {
         note: metadata.note || null,
         status: 'pending',
         stripe_payment_intent_id: paymentIntent.id,
+        // Present on a destination charge (see create-payment-intent.js),
+        // null for the house account's direct-charge path — see
+        // migration-stripe-connect-v2.sql.
+        platform_fee_amount: paymentIntent.application_fee_amount ? paymentIntent.application_fee_amount / 100 : null,
       });
 
       if (error) {

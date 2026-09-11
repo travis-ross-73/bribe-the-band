@@ -77,9 +77,33 @@ export default async function handler(req, res) {
       }
     }
 
+    // Look up who actually receives this tip, and what cut (if any) the
+    // platform takes — see migration-stripe-connect-v1.sql/v2.sql. A real
+    // performer with no connected account yet can't take tips at all:
+    // falling back to an unsplit charge into the platform's own account
+    // would recreate the exact pooled-money problem Connect exists to
+    // avoid, so this blocks instead of silently degrading. The house
+    // account (Travis's own real account, flagged explicitly rather than
+    // inferred from a null stripe_account_id — see v2's is_house_account)
+    // is the one deliberate exception, staying on the original direct-
+    // charge path with no Connect involvement at all.
+    const { data: payoutRows, error: payoutError } = await supabase.rpc('get_performer_payout_info', {
+      p_gig_session_id: gig_session_id,
+    });
+    if (payoutError) {
+      return res.status(500).json({ error: 'Could not verify payout setup: ' + payoutError.message });
+    }
+    const payout = (payoutRows || [])[0];
+    if (!payout) {
+      return res.status(400).json({ error: 'Could not find this gig\'s performer.' });
+    }
+    if (!payout.is_house_account && !payout.stripe_account_id) {
+      return res.status(400).json({ error: 'This performer hasn\'t set up payouts yet — tips can\'t be sent right now.' });
+    }
+
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
-    const paymentIntent = await stripe.paymentIntents.create({
+    const paymentIntentParams = {
       amount: Math.round(tipAmount * 100),
       currency: 'usd',
       // Explicit 'card' (not automatic_payment_methods) so every enabled
@@ -95,7 +119,18 @@ export default async function handler(req, res) {
         note: note || '',
         is_tip_only: is_tip_only ? '1' : '0',
       },
-    });
+    };
+
+    // application_fee_amount is computed on the gross tip — Stripe's own
+    // ~2.9%+30¢ processing fee comes out of the performer's share, not the
+    // platform's cut (Travis's explicit choice when the numbers were locked
+    // in — see 04-DECISIONS-AND-OPEN-QUESTIONS.md item 23).
+    if (!payout.is_house_account) {
+      paymentIntentParams.transfer_data = { destination: payout.stripe_account_id };
+      paymentIntentParams.application_fee_amount = Math.round(tipAmount * 100 * (payout.fee_percentage / 100));
+    }
+
+    const paymentIntent = await stripe.paymentIntents.create(paymentIntentParams);
 
     return res.status(200).json({ client_secret: paymentIntent.client_secret });
   } catch (err) {
