@@ -2867,7 +2867,7 @@
     if (gigIds.length > 0) {
       const { data: reqData, error: reqError } = await supabase
         .from('requests')
-        .select('gig_session_id, song_id, song_title, song_artist, tip_amount, status, is_manual, spliced_at')
+        .select('gig_session_id, song_id, song_title, song_artist, tip_amount, platform_fee_amount, status, is_manual, spliced_at')
         .in('gig_session_id', gigIds)
         .eq('is_manual', false);
       if (reqError) {
@@ -2998,7 +2998,7 @@
 
   exportReportCsvBtn.addEventListener('click', () => {
     const gigById = new Map(currentFilteredGigs.map(g => [g.id, g]));
-    const headers = ['Gig Date', 'Gig Code', 'Song Title', 'Artist', 'Tip Amount', 'Status', 'Played'];
+    const headers = ['Gig Date', 'Gig Code', 'Song Title', 'Artist', 'Tip Amount', 'Platform Fee', 'Status', 'Played'];
     const rows = currentFilteredRequests.map(r => {
       const g = gigById.get(r.gig_session_id);
       return [
@@ -3007,6 +3007,7 @@
         r.song_title || '',
         r.song_artist || '',
         Number(r.tip_amount || 0).toFixed(2),
+        r.platform_fee_amount != null ? Number(r.platform_fee_amount).toFixed(2) : '',
         r.status,
         r.spliced_at ? 'Yes' : 'No'
       ];
@@ -3017,6 +3018,14 @@
   function renderReporting(gigs, requests) {
     // ---- Lifetime totals ----
     const lifetimeTips = requests.reduce((sum, r) => sum + Number(r.tip_amount || 0), 0);
+    // Stripe Connect Express (04-DECISIONS-AND-OPEN-QUESTIONS.md item 36):
+    // "Total tips" above is deliberately left as the gross amount the crowd
+    // actually paid — that's the number that matches the tipper's own
+    // receipt, and the one that reflects how much support a gig actually
+    // got. platform_fee_amount is null for the house account and for any
+    // pre-Connect historical row, so this total is 0 (and the stat below
+    // stays hidden) for a report that never had a real per-performer cut.
+    const platformFee = requests.reduce((sum, r) => sum + Number(r.platform_fee_amount || 0), 0);
     const songRequests = requests.filter(r => r.song_id);
     const tipOnlyCount = requests.filter(r => !r.song_id).length;
     // Last Call tuning signal (item 29): a song request that never actually
@@ -3034,6 +3043,21 @@
       <div class="report-stat"><div class="report-stat-value">${gigs.length}</div><div class="report-stat-label">Gigs run</div></div>
       <div class="report-stat"><div class="report-stat-value">${neverPlayedCount}</div><div class="report-stat-label">Requested but never played</div></div>
     `;
+
+    // Gross-vs-net breakdown (item 36): only shown once the platform has
+    // actually taken a real cut in this range, so a report that predates
+    // Connect (or is entirely the house account, which pays no fee) looks
+    // exactly like it always did. Net payout here excludes Stripe's own
+    // per-transaction processing fee (~2.9%+30¢, on the performer's share
+    // per item 23) — that figure isn't recorded in this app's own data, so
+    // "Net payout" is what Stripe transfers before its own processing cut,
+    // not the final amount that lands in a bank account.
+    if (platformFee > 0) {
+      lifetimeSummaryEl.innerHTML += `
+        <div class="report-stat"><div class="report-stat-value">${formatMoney(platformFee)}</div><div class="report-stat-label">Platform fee taken</div></div>
+        <div class="report-stat"><div class="report-stat-value">${formatMoney(lifetimeTips - platformFee)}</div><div class="report-stat-label">Net payout (before Stripe processing)</div></div>
+      `;
+    }
 
     // Solo-vs-followed split (item 24, decided 2026-08-29): only shown once
     // at least one gig in this range ever had a Follower join, so a solo
