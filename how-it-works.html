@@ -3,6 +3,19 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<script>
+  // Affiliate-link capture: remembers ?ref=/?code= for 30 days so
+  // signup.html still gets it even if the visitor browses around or
+  // comes back later without the same link in the URL.
+  (function () {
+    var params = new URLSearchParams(window.location.search);
+    var ref = params.get('ref') || params.get('code');
+    if (ref) {
+      var expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toUTCString();
+      document.cookie = 'btb_ref=' + encodeURIComponent(ref) + '; expires=' + expires + '; path=/; SameSite=Lax';
+    }
+  })();
+</script>
 <title>How It Works — Bribe The Band</title>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <meta name="description" content="Five steps: the crowd opens a link, tips rank the queue live, your chart's already there when you accept, the whole band stays in sync, and Last Call ends the night clean.">
