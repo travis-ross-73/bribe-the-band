@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Highlights — Bribe The Band</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta name="description" content="Last Call, Stage Mode, Band Sync, direct payouts, and more — a closer look at what's built into every Bribe The Band gig page.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,400;6..96,600;6..96,700&family=Inter:wght@400;500;600;700;800&display=swap">
+<style>
+  :root {
+    --bg: #0E0C0A; --surface: #2A2622; --surface-2: #160F0C;
+    --text: #F4E4C8; --gold: #D4A017; --rust: #8B2E1F;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; overflow-x: hidden; }
+  a { color: var(--gold); text-decoration: none; }
+  a:hover { color: var(--text); }
+  h1, h2, h3 { font-family: 'Bodoni Moda', serif; font-weight: 700; margin: 0; }
+  img { max-width: 100%; }
+
+  .btn-primary { display: inline-block; background: var(--gold); color: var(--bg) !important; font-weight: 700; font-size: 15px; padding: 14px 26px; border-radius: 3px; white-space: nowrap; }
+  .btn-primary:hover { opacity: 0.88; }
+
+  .nav { display: flex; align-items: center; justify-content: space-between; padding: 24px 72px; position: relative; z-index: 20; }
+  .nav-logo { display: flex; align-items: center; gap: 10px; }
+  .nav-logo-text { font-family: 'Bodoni Moda', serif; font-weight: 700; font-size: 22px; letter-spacing: 0.5px; color: var(--text); }
+  .nav-links { display: flex; align-items: center; gap: 22px; }
+  .nav-link { font-size: 14px; font-weight: 500; color: rgba(244,228,200,0.65); white-space: nowrap; }
+  .nav-link.active { font-weight: 600; color: var(--gold); }
+  .nav-toggle { display: none; background: none; border: none; color: var(--text); font-size: 26px; line-height: 1; cursor: pointer; padding: 4px 8px; }
+  @media (max-width: 980px) {
+    .nav { padding: 20px 24px; }
+    .nav-links { display: none; position: absolute; top: 100%; left: 0; right: 0; background: var(--surface); flex-direction: column; align-items: stretch; padding: 8px 24px 20px; gap: 2px; border-bottom: 1px solid rgba(212,160,23,0.2); }
+    .nav-links.open { display: flex; }
+    .nav-link { padding: 14px 0; border-bottom: 1px solid rgba(244,228,200,0.08); }
+    .nav-links .btn-primary { margin-top: 12px; text-align: center; }
+    .nav-toggle { display: block; }
+  }
+
+  .site-footer { padding: 36px 72px; display: flex; align-items: center; justify-content: space-between; border-top: 1px solid #2A2622; flex-wrap: wrap; gap: 12px; }
+  .site-footer-brand { display: flex; align-items: center; gap: 8px; }
+  .site-footer-brand-text { font-family: 'Bodoni Moda', serif; font-weight: 700; font-size: 16px; color: rgba(244,228,200,0.5); }
+  .site-footer-copy { font-size: 13px; color: rgba(244,228,200,0.4); }
+  @media (max-width: 900px) { .site-footer { padding: 28px 24px; } }
+
+  .page-header { padding: 70px 72px 30px; text-align: center; }
+  .eyebrow { font-size: 13px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: var(--gold); margin-bottom: 16px; }
+  .page-header h1 { font-size: 46px; line-height: 1.15; margin: 0 auto 20px; max-width: 720px; }
+  .page-header p { font-size: 17px; color: rgba(244,228,200,0.65); max-width: 560px; margin: 0 auto; }
+  @media (max-width: 640px) { .page-header { padding: 48px 24px 20px; } .page-header h1 { font-size: 28px; } }
+
+  .feature-row { padding: 70px 72px; border-top: 1px solid #2A2622; display: flex; gap: 60px; align-items: flex-start; }
+  .feature-row.reverse { flex-direction: row-reverse; }
+  .demo-col { flex: 0.9; min-width: 0; width: 100%; }
+  .copy-col { flex: 1.1; min-width: 0; }
+  .copy-col h2 { font-size: 28px; margin: 0 0 20px; }
+  .demo-label { font-size: 12px; font-weight: 700; letter-spacing: 1px; color: rgba(244,228,200,0.5); text-transform: uppercase; text-align: center; margin-bottom: 12px; }
+  .check-list { display: flex; flex-direction: column; gap: 16px; }
+  .check-item { display: flex; gap: 12px; align-items: flex-start; }
+  .check-item svg { margin-top: 3px; flex-shrink: 0; }
+  .check-item p { font-size: 15px; line-height: 1.6; color: rgba(244,228,200,0.75); margin: 0; }
+  @media (max-width: 900px) {
+    .feature-row, .feature-row.reverse { flex-direction: column; gap: 32px; padding: 48px 24px; }
+    .copy-col h2 { font-size: 24px; }
+  }
+
+  .demo-card { background: var(--surface); border-radius: 6px; padding: 26px; border: 1px solid rgba(212,160,23,0.15); }
+  .demo-card-inner { background: var(--bg); border-radius: 4px; padding: 14px; margin-bottom: 10px; }
+
+  /* Last Call demo */
+  .lastcall-badge {
+    display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; color: var(--text);
+    background: rgba(139,46,31,0.35); padding: 5px 10px; border-radius: 12px; white-space: nowrap; margin-bottom: 14px;
+  }
+  .lastcall-dot { width: 8px; height: 8px; border-radius: 50%; animation: lastcall 2.5s ease-in-out infinite alternate; }
+  @keyframes lastcall { 0% { background: var(--gold); } 100% { background: var(--rust); } }
+  .lc-song-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-top: 1px solid rgba(244,228,200,0.08); }
+  .lc-song-row:first-of-type { border-top: none; }
+  .lc-song-row.closed { opacity: 0.4; }
+  .lc-song-title { font-size: 13.5px; font-weight: 600; }
+  .lc-song-artist { font-size: 11.5px; color: rgba(244,228,200,0.5); margin-top: 2px; }
+  .lc-tag { font-size: 10.5px; font-weight: 700; color: rgba(244,228,200,0.5); border: 1px solid rgba(244,228,200,0.2); padding: 3px 8px; border-radius: 10px; white-space: nowrap; }
+
+  /* Stage Mode demo */
+  .stagemode-frame { background: var(--bg); border-radius: 6px; border: 1px solid rgba(212,160,23,0.2); overflow: hidden; }
+  .stagemode-top { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid rgba(244,228,200,0.08); }
+  .stagemode-toggle { font-size: 11px; font-weight: 700; color: var(--gold); border: 1px solid var(--gold); padding: 5px 10px; border-radius: 6px; display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+  .stagemode-chart { padding: 22px 20px 26px; }
+  .stagemode-chart .ch-title { font-family: 'Bodoni Moda', serif; font-weight: 700; font-size: 15px; margin-bottom: 14px; }
+  .stagemode-chart .ch-line { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 2.1; }
+  .stagemode-chart .ch-chord { color: var(--gold); font-weight: 700; margin-right: 14px; }
+
+  /* Band Sync demo */
+  .bandsync-card { background: var(--surface); border-radius: 6px; padding: 22px 24px; border: 1px solid rgba(212,160,23,0.15); }
+  .bandsync-link-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-bottom: 14px; border-bottom: 1px solid rgba(212,160,23,0.15); margin-bottom: 14px; flex-wrap: wrap; }
+  .bandsync-link-label { font-size: 11px; font-weight: 700; letter-spacing: 0.5px; color: rgba(244,228,200,0.5); text-transform: uppercase; }
+  .bandsync-code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: rgba(244,228,200,0.6); background: var(--bg); padding: 3px 9px; border-radius: 5px; }
+  .bandsync-roster-label { font-size: 11px; font-weight: 700; letter-spacing: 0.5px; color: rgba(244,228,200,0.5); text-transform: uppercase; margin-bottom: 10px; }
+  .bandsync-follower { display: flex; align-items: center; gap: 10px; padding: 7px 0; }
+  .bandsync-avatar { width: 26px; height: 26px; border-radius: 50%; background: rgba(212,160,23,0.18); color: var(--gold); font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .bandsync-follower-name { font-size: 13px; font-weight: 600; }
+  .bandsync-follower-status { font-size: 10.5px; color: rgba(244,228,200,0.45); margin-left: auto; }
+
+  /* Simple highlight grid */
+  .highlights-grid-section { padding: 60px 72px 80px; border-top: 1px solid #2A2622; }
+  .highlights-grid-head { text-align: center; margin-bottom: 44px; }
+  .highlights-grid-head h2 { font-size: 30px; margin-bottom: 12px; }
+  .highlights-grid-head p { font-size: 15.5px; color: rgba(244,228,200,0.6); max-width: 520px; margin: 0 auto; }
+  .highlight-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 20px; }
+  .highlight-card { background: var(--surface); border: 1px solid rgba(212,160,23,0.15); border-radius: 6px; padding: 24px; }
+  .highlight-icon { width: 34px; height: 34px; border-radius: 50%; background: rgba(212,160,23,0.15); display: flex; align-items: center; justify-content: center; margin-bottom: 14px; font-size: 15px; }
+  .highlight-card h3 { font-size: 16px; margin-bottom: 8px; }
+  .highlight-card p { font-size: 13.5px; line-height: 1.55; color: rgba(244,228,200,0.65); margin: 0; }
+  @media (max-width: 640px) { .highlights-grid-section { padding: 44px 24px 56px; } .highlights-grid-head h2 { font-size: 24px; } }
+
+  .cta-band { padding: 64px 72px; background: var(--surface-2); text-align: center; }
+  .cta-band h2 { font-size: 28px; margin: 0 0 22px; }
+  @media (max-width: 640px) { .cta-band { padding: 48px 24px; } .cta-band h2 { font-size: 20px; } }
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <a class="nav-logo" href="/" aria-label="Bribe The Band — Home">
+    <svg width="28" height="28" viewBox="0 0 100 100"><defs><radialGradient id="navGlow" cx="50%" cy="42%" r="55%"><stop offset="0%" stop-color="#D4A017" stop-opacity="0.65"></stop><stop offset="55%" stop-color="#D4A017" stop-opacity="0.18"></stop><stop offset="100%" stop-color="#D4A017" stop-opacity="0"></stop></radialGradient></defs><circle cx="50" cy="42" r="34" fill="url(#navGlow)"></circle><rect x="41" y="18" width="18" height="32" rx="9" fill="#F4E4C8"></rect><path d="M32 46a18 18 0 0036 0" stroke="#F4E4C8" stroke-width="3" fill="none" stroke-linecap="round"></path><line x1="50" y1="64" x2="50" y2="76" stroke="#F4E4C8" stroke-width="3" stroke-linecap="round"></line><line x1="39" y1="76" x2="61" y2="76" stroke="#F4E4C8" stroke-width="3" stroke-linecap="round"></line></svg>
+    <div class="nav-logo-text">Bribe <span style="color:#D4A017;">The Band</span></div>
+  </a>
+  <button class="nav-toggle" id="navToggle" aria-label="Menu" aria-expanded="false">☰</button>
+  <div class="nav-links" id="navLinks">
+    <a class="nav-link" href="/how-it-works">How it works</a>
+    <a class="nav-link" href="/features">The product</a>
+    <a class="nav-link active" href="/highlights">Highlights</a>
+    <a class="nav-link" href="/console.html">Performer log in</a>
+    <a class="btn-primary" href="/get-started">Start your gig page</a>
+  </div>
+</div>
+
+<div class="page-header">
+  <div class="eyebrow">Highlights</div>
+  <h1>The little things that make gig night run itself.</h1>
+  <p>Built for actual gigs, not a demo — every one of these shipped after a real show surfaced the need for it.</p>
+</div>
+
+<div class="feature-row">
+  <div class="demo-col">
+    <div class="demo-label">Crowd page — late in the set</div>
+    <div class="demo-card">
+      <div class="lastcall-badge"><span class="lastcall-dot"></span> ⏰ LAST CALL — CLOSING SOON</div>
+      <div class="demo-card-inner" style="margin-bottom:0;">
+        <div class="lc-song-row">
+          <div>
+            <div class="lc-song-title">Sweet Caroline</div>
+            <div class="lc-song-artist">Neil Diamond</div>
+          </div>
+          <span class="lc-tag" style="color:#D4A017; border-color:#D4A017;">Still open</span>
+        </div>
+        <div class="lc-song-row closed">
+          <div>
+            <div class="lc-song-title">Wagon Wheel</div>
+            <div class="lc-song-artist">Old Crow Medicine Show</div>
+          </div>
+          <span class="lc-tag">Closed for tonight</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="copy-col">
+    <h2>Last Call</h2>
+    <div class="check-list">
+      <div class="check-item"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#D4A017" stroke-width="2.2"><path d="M20 6L9 17l-5-5"></path></svg><p>Tell it when tonight's set actually wraps, and requests taper off and close on their own as time runs out — no more accepting a request you'll never get to play.</p></div>
+      <div class="check-item"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#D4A017" stroke-width="2.2"><path d="M20 6L9 17l-5-5"></path></svg><p>Songs close gradually, not all at once — the crowd sees it coming instead of a request just disappearing.</p></div>
+      <div class="check-item"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#D4A017" stroke-width="2.2"><path d="M20 6L9 17l-5-5"></path></svg><p>Completely optional — leave it blank and nothing about tonight's gig changes.</p></div>
+      <div class="check-item"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#D4A017" stroke-width="2.2"><path d="M20 6L9 17l-5-5"></path></svg><p>No more awkwardly telling someone at 11:58pm that you can't play their request after all.</p></div>
+    </div>
+  </div>
+</div>
+
+<div class="feature-row reverse">
+  <div class="demo-col">
+    <div class="demo-label">Chart viewer — low light on stage</div>
+    <div class="stagemode-frame">
+      <div class="stagemode-top">
+        <div style="font-size:12.5px; font-weight:600; opacity:0.6;">All the Small Things — C</div>
+        <div class="stagemode-toggle">🌓 Stage Mode: On</div>
+      </div>
+      <div class="stagemode-chart">
+        <div class="ch-title">All the Small Things</div>
+        <div class="ch-line"><span class="ch-chord">C</span><span class="ch-chord">G</span><span class="ch-chord">Am</span><span class="ch-chord">F</span></div>
+        <div class="ch-line" style="color:rgba(244,228,200,0.85);">All the small things, true care truth brings</div>
+        <div class="ch-line"><span class="ch-chord">C</span><span class="ch-chord">G</span><span class="ch-chord">Am</span><span class="ch-chord">F</span></div>
+        <div class="ch-line" style="color:rgba(244,228,200,0.85);">I'll take one lift, your ride, best trip</div>
+      </div>
+    </div>
+  </div>
+  <div class="copy-col">
+    <h2>Stage Mode</h2>
+    <div class="check-list">
+      <div class="check-item"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#D4A017" stroke-width="2.2"><path d="M20 6L9 17l-5-5"></path></svg><p>One tap flips every chart to a black background with white text — a lot easier on the eyes than a glowing white page in a dark room.</p></div>
+      <div class="check-item"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#D4A017" stroke-width="2.2"><path d="M20 6L9 17l-5-5"></path></svg><p>Instant, and works on every chart already in your library — nothing to re-upload or reformat.</p></div>
+      <div class="check-item"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#D4A017" stroke-width="2.2"><path d="M20 6L9 17l-5-5"></path></svg><p>Colored highlights and markings on a chart stay close to their real color — only the black-and-white part flips.</p></div>
+      <div class="check-item"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#D4A017" stroke-width="2.2"><path d="M20 6L9 17l-5-5"></path></svg><p>Remembers your choice on that tablet — on for a dim bar stage, off again for a bright rehearsal room.</p></div>
+    </div>
+  </div>
+</div>
+
+<div class="feature-row">
+  <div class="demo-col">
+    <div class="demo-label">Console — Followers</div>
+    <div class="bandsync-card">
+      <div class="bandsync-link-row">
+        <span class="bandsync-link-label">Gig code</span>
+        <span class="bandsync-code">GMTXJOTI9</span>
+      </div>
+      <div class="bandsync-roster-label">Following tonight</div>
+      <div class="bandsync-follower">
+        <div class="bandsync-avatar">AJ</div>
+        <div class="bandsync-follower-name">AJ</div>
+        <div class="bandsync-follower-status">In sync</div>
+      </div>
+      <div class="bandsync-follower">
+        <div class="bandsync-avatar">R</div>
+        <div class="bandsync-follower-name">Randy</div>
+        <div class="bandsync-follower-status">In sync</div>
+      </div>
+    </div>
+  </div>
+  <div class="copy-col">
+    <h2>Band Sync</h2>
+    <div class="check-list">
+      <div class="check-item"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#D4A017" stroke-width="2.2"><path d="M20 6L9 17l-5-5"></path></svg><p>Every bandmate follows your live set from their own account and their own tablet — no shared login, no passing a device around.</p></div>
+      <div class="check-item"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#D4A017" stroke-width="2.2"><path d="M20 6L9 17l-5-5"></path></svg><p>A request you accept splices into everyone's chart order at the same time — every screen stays exactly in sync.</p></div>
+      <div class="check-item"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#D4A017" stroke-width="2.2"><path d="M20 6L9 17l-5-5"></path></svg><p>See who's following in a live roster, and remove anyone anytime.</p></div>
+      <div class="check-item"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#D4A017" stroke-width="2.2"><path d="M20 6L9 17l-5-5"></path></svg><p>Wraps up automatically when the gig ends — nothing to clean up before next time.</p></div>
+    </div>
+  </div>
+</div>
+
+<div class="highlights-grid-section">
+  <div class="highlights-grid-head">
+    <h2>And the rest of it</h2>
+    <p>Everything else that's quietly built in, whether you ever notice it or not.</p>
+  </div>
+  <div class="highlight-grid">
+    <div class="highlight-card">
+      <div class="highlight-icon">⬆️</div>
+      <h3>Tip to Boost</h3>
+      <p>A tip on an already-requested song bumps it up the queue instantly — the crowd decides what gets played next.</p>
+    </div>
+    <div class="highlight-card">
+      <div class="highlight-icon">⏳</div>
+      <h3>Smart Cooldown</h3>
+      <p>A song that just got played can't be re-requested for a few minutes, so the same request doesn't immediately stack right back up.</p>
+    </div>
+    <div class="highlight-card">
+      <div class="highlight-icon">🎚️</div>
+      <h3>Nightly Request Cap</h3>
+      <p>Cap how many times one song can pile up in a single night — set it once, it carries over automatically every gig.</p>
+    </div>
+    <div class="highlight-card">
+      <div class="highlight-icon">🔍</div>
+      <h3>Add a Song on the Fly</h3>
+      <p>Search your whole catalog and drop a song into tonight's set mid-show — perfect for an unplanned encore.</p>
+    </div>
+    <div class="highlight-card">
+      <div class="highlight-icon">📄</div>
+      <h3>Optional Chart PDFs</h3>
+      <p>Add a song to your library by title and artist alone — upload the real chart whenever you get around to it.</p>
+    </div>
+    <div class="highlight-card">
+      <div class="highlight-icon">📚</div>
+      <h3>Bulk Import</h3>
+      <p>Upload a whole stack of chart PDFs at once, plus an optional CSV of titles/artists/keys — no one-at-a-time data entry.</p>
+    </div>
+    <div class="highlight-card">
+      <div class="highlight-icon">🎼</div>
+      <h3>Setlist Builder</h3>
+      <p>Build, save, and reuse setlists for different gig lengths — a 2-hour set, a full night, a stripped-down duo show.</p>
+    </div>
+    <div class="highlight-card">
+      <div class="highlight-icon">📊</div>
+      <h3>Reporting</h3>
+      <p>Every gig's tips, requests, and most-requested songs, plus a clear gross-vs-net payout breakdown.</p>
+    </div>
+    <div class="highlight-card">
+      <div class="highlight-icon">🏦</div>
+      <h3>Direct Payouts</h3>
+      <p>Tips go straight to your own bank account through Stripe — nothing pools, nothing waits on us.</p>
+    </div>
+    <div class="highlight-card">
+      <div class="highlight-icon">🕒</div>
+      <h3>Browse Anytime</h3>
+      <p>Your crowd page stays live between gigs, so fans can browse your full catalog even when you're offstage.</p>
+    </div>
+  </div>
+</div>
+
+<div class="cta-band">
+  <h2>Free to sign up. We take 10% of tips, nothing else.</h2>
+  <a class="btn-primary" href="/get-started" style="font-size:16px; padding:15px 32px;">Start your gig page</a>
+</div>
+
+<div class="site-footer">
+  <div class="site-footer-brand">
+    <svg width="18" height="18" viewBox="0 0 100 100" opacity="0.6"><circle cx="50" cy="42" r="34" fill="#D4A017" opacity="0.2"></circle><rect x="41" y="18" width="18" height="32" rx="9" fill="#F4E4C8"></rect><path d="M32 46a18 18 0 0036 0" stroke="#F4E4C8" stroke-width="4" fill="none" stroke-linecap="round"></path><line x1="50" y1="64" x2="50" y2="76" stroke="#F4E4C8" stroke-width="4" stroke-linecap="round"></line><line x1="39" y1="76" x2="61" y2="76" stroke="#F4E4C8" stroke-width="4" stroke-linecap="round"></line></svg>
+    <div class="site-footer-brand-text">Bribe The Band</div>
+  </div>
+  <div class="site-footer-copy">© 2026 · Built by a working musician</div>
+</div>
+
+<script>
+  var navToggle = document.getElementById('navToggle');
+  var navLinks = document.getElementById('navLinks');
+  navToggle.addEventListener('click', function () {
+    var isOpen = navLinks.classList.toggle('open');
+    navToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    navToggle.textContent = isOpen ? '✕' : '☰';
+  });
+</script>
+
+</body>
+</html>
