@@ -163,8 +163,28 @@
   // [affiliates] up, but will need to be able to give them a link and/or
   // code." A link just pre-fills the same code field a manually-shared
   // code would be typed into.
+  //
+  // Falls back to a btb_ref cookie (set here, and by the marketing pages'
+  // own capture snippet) when THIS page load has no ?ref=/?code= of its
+  // own — covers "clicked the link today, actually signs up next week"
+  // without needing the same link carried through every step. A code
+  // still has to pass the normal live-validation check below either way;
+  // this only changes what pre-fills the field, not how it's verified.
+  function getCookie(name) {
+    const match = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
+    return match ? decodeURIComponent(match[1]) : null;
+  }
+  function setCookie(name, value, days) {
+    const expires = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toUTCString();
+    document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Lax`;
+  }
+
   const urlParams = new URLSearchParams(window.location.search);
-  const refCode = urlParams.get('ref') || urlParams.get('code');
+  const refCodeFromUrl = urlParams.get('ref') || urlParams.get('code');
+  if (refCodeFromUrl) {
+    setCookie('btb_ref', refCodeFromUrl, 30);
+  }
+  const refCode = refCodeFromUrl || getCookie('btb_ref');
   if (refCode) {
     promoInput.value = refCode;
   }
