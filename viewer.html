@@ -66,7 +66,7 @@
     border-radius: 999px;
     white-space: nowrap;
   }
-  #exit-btn, #fullscreen-btn, #add-song-btn {
+  #exit-btn, #fullscreen-btn, #add-song-btn, #stage-mode-btn {
     background: transparent;
     border: 1px solid #2a2e40;
     color: var(--muted);
@@ -75,6 +75,12 @@
     cursor: pointer;
     font-size: 0.82rem;
     white-space: nowrap;
+  }
+  /* Stays visually "on" (accent-colored) while active, same treatment the
+     rest of the app uses for a toggled-on state. */
+  #stage-mode-btn.active {
+    color: var(--accent);
+    border-color: var(--accent);
   }
 
   #stage {
@@ -94,6 +100,16 @@
     max-height: 100%;
     box-shadow: 0 4px 24px rgba(0,0,0,0.5);
     background: #fff;
+  }
+  /* Stage Mode: inverts the rendered chart page so a white-background PDF
+     reads as light text on a dark surface — easier on the eyes at low
+     stage lighting. hue-rotate(180deg) alongside invert(1) is the standard
+     "dark mode for images" pairing: it cancels the hue flip invert(1)
+     alone would apply to any colored ink (so red/blue markings stay close
+     to their original color), while still flipping black-on-white to
+     white-on-black. */
+  #page-canvas.inverted {
+    filter: invert(1) hue-rotate(180deg);
   }
 
   .click-zone {
@@ -455,6 +471,7 @@
       <div class="play-badge hidden" id="follower-badge">👥 Following</div>
       <div class="play-badge hidden" id="play-badge">played 0x tonight</div>
       <button id="add-song-btn" class="hidden">🔍 Add Song</button>
+      <button id="stage-mode-btn">🌓 Stage Mode</button>
       <button id="fullscreen-btn">⛶ Full Screen</button>
       <button id="exit-btn">Exit to Console</button>
     </div>
@@ -592,6 +609,7 @@
   const cutoffBadge = document.getElementById('cutoff-badge');
   const exitBtn = document.getElementById('exit-btn');
   const fullscreenBtn = document.getElementById('fullscreen-btn');
+  const stageModeBtn = document.getElementById('stage-mode-btn');
   const canvas = document.getElementById('page-canvas');
   const ctx = canvas.getContext('2d');
   const zonePrev = document.getElementById('zone-prev');
@@ -1865,6 +1883,25 @@
 
   document.addEventListener('fullscreenchange', updateFullscreenBtnLabel);
   document.addEventListener('webkitfullscreenchange', updateFullscreenBtnLabel);
+
+  // Stage Mode: inverted chart colors for low-light stage use. A per-device
+  // display preference, not gig/account data, so it's remembered via
+  // localStorage rather than saved anywhere in Supabase — it should stick
+  // to whichever tablet it was turned on on, same as the fullscreen toggle
+  // effectively does.
+  const STAGE_MODE_KEY = 'btb_stage_mode_inverted';
+  function applyStageMode(on) {
+    canvas.classList.toggle('inverted', on);
+    stageModeBtn.classList.toggle('active', on);
+    stageModeBtn.textContent = on ? '🌓 Stage Mode: On' : '🌓 Stage Mode';
+  }
+  let stageModeOn = localStorage.getItem(STAGE_MODE_KEY) === '1';
+  applyStageMode(stageModeOn);
+  stageModeBtn.addEventListener('click', () => {
+    stageModeOn = !stageModeOn;
+    localStorage.setItem(STAGE_MODE_KEY, stageModeOn ? '1' : '0');
+    applyStageMode(stageModeOn);
+  });
 
   init();
 </script>
