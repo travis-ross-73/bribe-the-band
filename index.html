@@ -58,6 +58,8 @@
   .nav-logo-text { font-family: 'Bodoni Moda', serif; font-weight: 700; font-size: 22px; letter-spacing: 0.5px; color: var(--text); }
   .nav-links { display: flex; align-items: center; gap: 22px; }
   .nav-link { font-size: 14px; font-weight: 500; color: rgba(244,228,200,0.65); white-space: nowrap; }
+  .nav-link-login { font-size: 13px; font-weight: 500; color: rgba(244,228,200,0.4); white-space: nowrap; }
+  .nav-link-login:hover { color: rgba(244,228,200,0.7); }
   .nav-link.active { font-weight: 600; color: var(--gold); }
   .nav-toggle {
     display: none; background: none; border: none; color: var(--text);
@@ -72,7 +74,7 @@
       padding: 8px 24px 20px; gap: 2px; border-bottom: 1px solid rgba(212,160,23,0.2);
     }
     .nav-links.open { display: flex; }
-    .nav-link { padding: 14px 0; border-bottom: 1px solid rgba(244,228,200,0.08); }
+    .nav-link, .nav-link-login { padding: 14px 0; border-bottom: 1px solid rgba(244,228,200,0.08); }
     .nav-links .btn-primary { margin-top: 12px; text-align: center; }
     .nav-toggle { display: block; }
   }
@@ -110,6 +112,18 @@
     .hero { padding: 56px 24px 72px; }
     .hero h1 { font-size: 38px; }
     .hero p.lede { font-size: 17px; }
+  }
+
+  /* PROBLEM */
+  .problem { border-top: none; padding-top: 0; }
+  .problem-inner { max-width: 780px; margin: 0 auto; text-align: center; }
+  .problem-eyebrow { font-size: 13px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--rust); margin-bottom: 18px; }
+  .problem-title { font-size: 32px; line-height: 1.3; margin: 0 0 22px; }
+  .problem-body { font-size: 17px; line-height: 1.75; color: rgba(244,228,200,0.7); margin: 0 0 22px; }
+  .problem-resolve { font-size: 17px; font-weight: 700; color: var(--gold); margin: 0; }
+  @media (max-width: 640px) {
+    .problem-title { font-size: 24px; }
+    .problem-body, .problem-resolve { font-size: 15.5px; }
   }
 
   /* HOW IT WORKS (3 steps) */
@@ -187,28 +201,36 @@
   <div class="nav-links" id="navLinks">
     <a class="nav-link" href="/how-it-works">How it works</a>
     <a class="nav-link" href="/features">The product</a>
-    <a class="nav-link" href="/highlights">Highlights</a>
-    <a class="nav-link" href="/console.html">Performer log in</a>
-    <a class="btn-primary" href="/get-started">Start your gig page</a>
+    <a class="nav-link-login" href="/console.html">Log in</a>
+    <a class="btn-primary" href="/get-started">Create your gig page</a>
   </div>
 </div>
 
 <div class="hero">
   <div class="hero-glow"></div>
   <div class="hero-inner">
-    <div class="eyebrow">Live at real gigs since Aug 2026</div>
+    <div class="eyebrow">Live at real gigs since the summer of 2026</div>
     <h1>Song requests, tips, and charts all at your fingertips in real-time as you perform.</h1>
     <p class="lede">Bribe The Band turns your crowd's phones into a request line and a tip jar — with a live, tip-weighted queue and swipe-through PDF charts that run right on your tablet and sync with your band all while you play.</p>
     <div class="hero-ctas">
-      <a class="btn-primary" href="/get-started">Start your gig page</a>
+      <a class="btn-primary" href="/get-started">Create your gig page</a>
       <a class="link-underline" href="/demo">See a live crowd page →</a>
     </div>
   </div>
 </div>
 
+<section class="problem">
+  <div class="wrap problem-inner">
+    <div class="problem-eyebrow">The moment every performer knows</div>
+    <h2 class="problem-title">Someone asks for a song you don't know. Or worse — you do.</h2>
+    <p class="problem-body">The chart's in there somewhere — another setlist, a different app, maybe a literal binder under someone's chair. So you shout the title across the stage and wait. Hope the bass player has his charts. Hope the room doesn't hear "wait, what key?" Hope the moment doesn't die while everyone finds their part.</p>
+    <p class="problem-resolve">Bribe The Band exists so that moment stops happening — and so the crowd gets to be part of making the show good, not just watching it.</p>
+  </div>
+</section>
+
 <section id="how">
   <div class="wrap">
-    <h2 class="section-title">Three steps. No app for the crowd.</h2>
+    <h2 class="section-title">Three steps. Every request already knows its chart.</h2>
     <div class="steps-grid">
       <div class="step">
         <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#D4A017" stroke-width="1.8"><path d="M9 15l6-6"></path><path d="M8 9a4 4 0 015.657 0l1 1a4 4 0 010 5.657l-2 2"></path><path d="M16 15a4 4 0 01-5.657 0l-1-1a4 4 0 010-5.657l2-2"></path></svg>
@@ -225,8 +247,8 @@
       <div class="step">
         <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#D4A017" stroke-width="1.8"><path d="M12 15a3 3 0 003-3V6a3 3 0 00-6 0v6a3 3 0 003 3z"></path><path d="M19 11a7 7 0 01-14 0"></path><path d="M12 18v3M9 21h6"></path></svg>
         <div class="step-label">STEP THREE</div>
-        <h3>You run the queue</h3>
-        <p>Requests stack up tip-weighted on your tablet with the chart already attached. Swipe through your own PDF charts the same way you already do — the requests wait until you tap it. It then drops the requested song's chart as your next swipe.</p>
+        <h3>The chart's already there</h3>
+        <p>Requests stack up tip-weighted on your tablet with the chart already attached — no digging through a binder, no hunting in another app. Accept one and it drops in as your very next swipe, already open to the right page.</p>
       </div>
     </div>
   </div>
@@ -289,10 +311,10 @@
 <section class="founder">
   <div class="founder-inner">
     <h2>Built on an actual stage, not a whiteboard.</h2>
-    <p>Bribe The Band started as one performer's fix for his own gigs — replacing a paper songbook and a literal tip jar with something his crowd could use from their phones and he could run from his tablet without having to say no to songs he didn't know or manually search for songs he did. He's been using it for both his solo gigs as well as his 5-piece band. It's been bringing in real requests and real tips at real shows since August 2026.</p>
+    <p>Bribe The Band started as one performer's fix for his own gigs — replacing a paper songbook and a literal tip jar with something his crowd could use from their phones, and something he could run from his own tablet without ever having to say no to a song he didn't know, or dig for one he did. He's used it solo, and leading his full band — every bandmate's tablet staying in sync with his, so nobody's shouting a song title across the stage anymore. It's been bringing in real requests and real tips at real gigs since the summer of 2026.</p>
     <div class="founder-cta">
       <p>Free to sign up. We take 10% of tips — no monthly fee, nothing else.</p>
-      <a class="btn-primary" href="/get-started">Start your gig page</a>
+      <a class="btn-primary" href="/get-started">Create your gig page</a>
     </div>
   </div>
 </section>

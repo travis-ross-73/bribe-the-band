@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>How It Works — Bribe The Band</title>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-<meta name="description" content="Three steps: the crowd opens a link, tips rank the queue live, and you run the whole show from one tablet.">
+<meta name="description" content="Five steps: the crowd opens a link, tips rank the queue live, your chart's already there when you accept, the whole band stays in sync, and Last Call ends the night clean.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,400;6..96,600;6..96,700&family=Inter:wght@400;500;600;700;800&display=swap">
 <style>
@@ -29,13 +29,15 @@
   .nav-logo-text { font-family: 'Bodoni Moda', serif; font-weight: 700; font-size: 22px; letter-spacing: 0.5px; color: var(--text); }
   .nav-links { display: flex; align-items: center; gap: 22px; }
   .nav-link { font-size: 14px; font-weight: 500; color: rgba(244,228,200,0.65); white-space: nowrap; }
+  .nav-link-login { font-size: 13px; font-weight: 500; color: rgba(244,228,200,0.4); white-space: nowrap; }
+  .nav-link-login:hover { color: rgba(244,228,200,0.7); }
   .nav-link.active { font-weight: 600; color: var(--gold); }
   .nav-toggle { display: none; background: none; border: none; color: var(--text); font-size: 26px; line-height: 1; cursor: pointer; padding: 4px 8px; }
   @media (max-width: 980px) {
     .nav { padding: 20px 24px; }
     .nav-links { display: none; position: absolute; top: 100%; left: 0; right: 0; background: var(--surface); flex-direction: column; align-items: stretch; padding: 8px 24px 20px; gap: 2px; border-bottom: 1px solid rgba(212,160,23,0.2); }
     .nav-links.open { display: flex; }
-    .nav-link { padding: 14px 0; border-bottom: 1px solid rgba(244,228,200,0.08); }
+    .nav-link, .nav-link-login { padding: 14px 0; border-bottom: 1px solid rgba(244,228,200,0.08); }
     .nav-links .btn-primary { margin-top: 12px; text-align: center; }
     .nav-toggle { display: block; }
   }
@@ -77,6 +79,28 @@
   .console-step-card.filled { background: var(--bg); border-color: rgba(212,160,23,0.3); }
   .console-step-label { font-size: 12px; font-weight: 700; letter-spacing: 0.5px; color: var(--rust); margin-bottom: 8px; }
 
+  /* Band Sync demo */
+  .bandsync-card { background: var(--surface); border-radius: 6px; padding: 22px 24px; border: 1px solid rgba(212,160,23,0.15); }
+  .bandsync-link-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-bottom: 14px; border-bottom: 1px solid rgba(212,160,23,0.15); margin-bottom: 14px; flex-wrap: wrap; }
+  .bandsync-link-label { font-size: 11px; font-weight: 700; letter-spacing: 0.5px; color: rgba(244,228,200,0.5); text-transform: uppercase; }
+  .bandsync-code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: rgba(244,228,200,0.6); background: var(--bg); padding: 3px 9px; border-radius: 5px; }
+  .bandsync-roster-label { font-size: 11px; font-weight: 700; letter-spacing: 0.5px; color: rgba(244,228,200,0.5); text-transform: uppercase; margin-bottom: 10px; }
+  .bandsync-follower { display: flex; align-items: center; gap: 10px; padding: 7px 0; }
+  .bandsync-avatar { width: 26px; height: 26px; border-radius: 50%; background: rgba(212,160,23,0.18); color: var(--gold); font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .bandsync-follower-name { font-size: 13px; font-weight: 600; }
+  .bandsync-follower-status { font-size: 10.5px; color: rgba(244,228,200,0.45); margin-left: auto; }
+
+  /* Last Call demo */
+  .lastcall-badge { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; color: var(--text); background: rgba(139,46,31,0.35); padding: 5px 10px; border-radius: 12px; white-space: nowrap; margin-bottom: 14px; }
+  .lastcall-dot { width: 8px; height: 8px; border-radius: 50%; animation: lastcall 2.5s ease-in-out infinite alternate; }
+  @keyframes lastcall { 0% { background: var(--gold); } 100% { background: var(--rust); } }
+  .lc-song-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-top: 1px solid rgba(244,228,200,0.08); }
+  .lc-song-row:first-of-type { border-top: none; }
+  .lc-song-row.closed { opacity: 0.4; }
+  .lc-song-title { font-size: 13.5px; font-weight: 600; }
+  .lc-song-artist { font-size: 11.5px; color: rgba(244,228,200,0.5); margin-top: 2px; }
+  .lc-tag { font-size: 10.5px; font-weight: 700; color: rgba(244,228,200,0.5); border: 1px solid rgba(244,228,200,0.2); padding: 3px 8px; border-radius: 10px; white-space: nowrap; }
+
   .cta-band { padding: 64px 72px; background: var(--surface-2); text-align: center; }
   .cta-band h2 { font-size: 28px; margin: 0 0 22px; }
   @media (max-width: 640px) { .cta-band { padding: 48px 24px; } .cta-band h2 { font-size: 22px; } }
@@ -93,22 +117,21 @@
   <div class="nav-links" id="navLinks">
     <a class="nav-link active" href="/how-it-works">How it works</a>
     <a class="nav-link" href="/features">The product</a>
-    <a class="nav-link" href="/highlights">Highlights</a>
-    <a class="nav-link" href="/console.html">Performer log in</a>
-    <a class="btn-primary" href="/get-started">Start your gig page</a>
+    <a class="nav-link-login" href="/console.html">Log in</a>
+    <a class="btn-primary" href="/get-started">Create your gig page</a>
   </div>
 </div>
 
 <div class="page-header">
   <div class="eyebrow">How it works</div>
-  <h1>Three steps, and the crowd never leaves their seat.</h1>
+  <h1>Five steps, and no one's ever stuck without a chart.</h1>
 </div>
 
 <div class="step-row">
   <div class="step-col">
     <div class="step-eyebrow">STEP ONE</div>
     <h2>Open your link — no app, no login</h2>
-    <p>Display your crowd page QR code from the stage, or share the link straight up. It opens straight to your curated song list. Fans choose a song, add a tip and an optional note.</p>
+    <p>Display your crowd page QR code from the stage, or share the link straight up. It opens straight to tonight's curated song list — only the songs you're actually ready to play, so nobody requests something you don't know. Fans choose a song, add a tip and an optional note.</p>
     <p>A tip-only option is available, too — for the fan that just wants to say thanks without requesting anything.</p>
   </div>
   <div class="demo-card">
@@ -138,7 +161,7 @@
   <div class="step-col">
     <div class="step-eyebrow">STEP TWO</div>
     <h2>Tips rank the queue, live, for everyone to see</h2>
-    <p>Every tip lands straight in your own account and moves that song up. Anyone can add another tip to boost a song that's already in queue adding a social element.</p>
+    <p>Every tip lands straight in your own account and moves that song up. Anyone can add another tip to boost a song that's already in queue — the crowd isn't just watching the set get built, they're building it.</p>
     <p>If you've set a nightly cap, an already-full song just says so, warmly — no error, no dead end.</p>
   </div>
   <div class="demo-card">
@@ -169,8 +192,8 @@
 <div class="step-row">
   <div class="step-col">
     <div class="step-eyebrow">STEP THREE</div>
-    <h2>You run the whole show from one tablet</h2>
-    <p>Before you play: pick tonight's setlist and go live. During the set: the same tablet swipes through your own PDF charts, page by page — the request drawer waits quietly until you tap it. Play with a band? Every bandmate's tablet stays synced to the same spot.</p>
+    <h2>The chart's already there when you accept</h2>
+    <p>Before you play: pick tonight's setlist and go live. During the set: the same tablet swipes through your own PDF charts, page by page — the request drawer waits quietly until you tap it. No stopping to dig through a binder or a different app.</p>
     <p>Accept a request and its key, capo notes, and tip land right where you're already reading — the chart drops in as your very next swipe. Tap "Got it — play the song" and keep going.</p>
   </div>
   <div class="step-col" style="display:flex; flex-direction:column; gap:16px;">
@@ -192,9 +215,67 @@
   </div>
 </div>
 
+<div class="step-row reverse">
+  <div class="step-col">
+    <div class="step-eyebrow">STEP FOUR</div>
+    <h2>Playing with a band? Everyone stays in sync</h2>
+    <p>Every bandmate follows tonight's live set from their own account, on their own device — no shared login, no passing one tablet around. The moment you accept a request, it splices into everyone's set at the same instant.</p>
+    <p>That sync is the actual point — nobody's guessing what's next, nobody's a beat behind. No more shouting a title across the stage and waiting for everyone to find their part.</p>
+  </div>
+  <div class="step-col">
+    <div class="bandsync-card">
+      <div class="bandsync-link-row">
+        <span class="bandsync-link-label">Gig code</span>
+        <span class="bandsync-code">GMTXJOTI9</span>
+      </div>
+      <div class="bandsync-roster-label">Following tonight</div>
+      <div class="bandsync-follower">
+        <div class="bandsync-avatar">AJ</div>
+        <div class="bandsync-follower-name">AJ</div>
+        <div class="bandsync-follower-status">In sync</div>
+      </div>
+      <div class="bandsync-follower">
+        <div class="bandsync-avatar">R</div>
+        <div class="bandsync-follower-name">Randy</div>
+        <div class="bandsync-follower-status">In sync</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="step-row">
+  <div class="step-col">
+    <div class="step-eyebrow">STEP FIVE</div>
+    <h2>Last Call, so the night ends clean</h2>
+    <p>Tell it when tonight's set actually wraps, and requests taper off and close on their own as the clock runs out — no more accepting a request you'll never get to play, and no more standing on stage explaining why.</p>
+    <p>Completely optional — leave it blank and nothing about tonight's gig changes.</p>
+  </div>
+  <div class="step-col">
+    <div class="demo-card" style="padding: 26px;">
+      <div class="lastcall-badge"><span class="lastcall-dot"></span> ⏰ LAST CALL — CLOSING SOON</div>
+      <div class="demo-card-inner" style="margin-bottom:0;">
+        <div class="lc-song-row">
+          <div>
+            <div class="lc-song-title">Sweet Caroline</div>
+            <div class="lc-song-artist">Neil Diamond</div>
+          </div>
+          <span class="lc-tag" style="color:#D4A017; border-color:#D4A017;">Still open</span>
+        </div>
+        <div class="lc-song-row closed">
+          <div>
+            <div class="lc-song-title">Wagon Wheel</div>
+            <div class="lc-song-artist">Old Crow Medicine Show</div>
+          </div>
+          <span class="lc-tag">Closed for tonight</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="cta-band">
   <h2>Ready to try it at your next gig?</h2>
-  <a class="btn-primary" href="/get-started" style="font-size:16px; padding:15px 32px;">Start your gig page</a>
+  <a class="btn-primary" href="/get-started" style="font-size:16px; padding:15px 32px;">Create your gig page</a>
 </div>
 
 <div class="site-footer">
