@@ -55,7 +55,7 @@ Also still true: chart PDFs are optional when adding a song, forgot-password/cha
 Travis had mentioned waiting on "admin to re-enable access," which was never clarified in the moment. **Resolved**: this referred to Travis's own Claude subscription access, not anything in this project — a billing/credit-card issue that the org's admin fixed. Not staging-related; no longer worth tracking here.
 
 ## Docs in this folder
-Originally exported from the claude.ai Project "Song Request and Tip App," then kept locally in Dropbox, then **moved into this git repo's `docs/` folder 2026-08-29** — see the note below. All 11 numbered docs plus this summary:
+Originally exported from the claude.ai Project "Song Request and Tip App," then kept locally in Dropbox, then **moved into this git repo's `docs/` folder 2026-08-29** — see the note below. All numbered docs plus this summary:
 - `00-PROJECT-OVERVIEW.md` — original prototype-era overview (superseded in substance by `01-...`, kept for history)
 - `01-ARCHITECTURE-AND-DATA-MODEL.md` — **the most important file**: full current architecture, data model, every feature built and why, Wade's security doctrine
 - `02-SONG-DATABASE.md` — where Travis's chart library lives, the 50-song approved list
@@ -67,6 +67,8 @@ Originally exported from the claude.ai Project "Song Request and Tip App," then 
 - `08-PERFORMER-FAQ-TUTORIAL-NOTES.md` — running list of customer-facing FAQ/tutorial topics to write later (not started)
 - `09-CONNECT-EXPRESS-SCOPE.md` — Stripe Connect Express plan (self-serve per-performer payouts, the 10% platform fee) — **built, tested, and ported to production 2026-09-11**
 - `10-OWNER-CONSOLE-SCOPE.md` — a local-only (never publicly deployed) admin tool: performer/affiliate management, cross-performer revenue and affiliate-commission reporting, pulling from both Supabase (via service_role) and Stripe — **built and verified in both environments, 2026-09-11/12**, in its own separate repo (`bribe-the-band-owner-console`)
+- `13-SITE-AUDIT-AND-COMPLIANCE.md` — **added 2026-09-13**, a cold outside audit of the live marketing/signup site: legal/compliance gaps (no Terms/Privacy/Refund policy, no legal entity, chart-storage exposure), a confirmed `/demo` bug, fee-disclosure and copy issues, and a ranked action plan (Tier 0 through Tier 3). Nothing in Tier 0 has been actioned yet — see item 50 in `04-DECISIONS-AND-OPEN-QUESTIONS.md`. References `11-CHART-APP-IMPORT-SCOPE.md` and `12-PATENT-RISK-ASSESSMENT.md`, neither of which exists in this repo yet — likely written in a separate Cowork thread and not yet added here.
+- `LEGAL-DRAFT-terms-of-service.md`, `LEGAL-DRAFT-privacy-policy.md`, `LEGAL-DRAFT-refund-and-request-policy.md` — **added 2026-09-13**, first-pass drafts for the Tier 0 legal gaps above. Explicitly marked "DRAFT FOR ATTORNEY REVIEW — DO NOT PUBLISH AS-IS" and written by an AI assistant, not a lawyer — every placeholder (`[ENTITY]`, `[EFFECTIVE DATE]`, etc.) and every **[VERIFY]**/**[ATTORNEY DECISION POINT]** flag must be resolved before any of these goes live. Travis said more drafts are coming in this same area.
 - `2-hour-setlist.md` — a sample setlist built from the approved song database
 - `gig-request-prototype.html` — the very first single-file prototype, superseded, kept only as a UX reference
 
