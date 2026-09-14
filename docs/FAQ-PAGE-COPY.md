@@ -39,7 +39,7 @@ What we recommend, and what we do ourselves: **run your tablet off your phone's 
 
 A tablet is what this was built for — the chart viewer needs the screen size, and one iPad running charts, setlist, and the request drawer is the whole setup. That's it. No second device, no laptop, no dedicated hardware.
 
-**[CONFIRM]** *It runs in a browser, so it'll open on a phone or a laptop too — a phone screen is tight for reading charts mid-song, but fine for checking requests or running a tip-only night. Verify the viewer actually renders usably at phone width before publishing this paragraph.*
+**[CONFIRM]** *Verified 2026-09-14: usable on a phone. Rewrite this paragraph as a plain statement — "it runs in a browser, so it opens on a phone or laptop too; a tablet is easier to read from mid-song, but a phone works" — and drop the flag.*
 
 ### Do I need to download an app?
 
@@ -129,7 +129,7 @@ When a song hits its cap, the crowd sees a friendly message rather than an error
 
 ### Can my audience see the notes people write?
 
-**Yes — assume notes are public.** They show up for you on your tablet and they may also appear next to the song on the request list everyone in the room can see on their phone. Worth knowing before someone writes something they meant just for you.
+No. Notes come to you on your own device. They don't appear on the public request list, so a dedication meant for you stays between you and whoever wrote it.
 
 ### Will my crowd actually use it?
 
@@ -166,7 +166,9 @@ Charts are visible to you and to any bandmates you've invited to a live gig. **[
 
 ### What format do charts need to be?
 
-PDF. **[CONFIRM]** *One page per song is the format the viewer is built around — confirm the real page limit, file size limit, and what happens to a multi-page chart before publishing specifics.*
+PDF, and that's the only real rule. Multi-page charts work fine — pages flow in order within the song, and the song flows into the next one in your set order, so the whole night is one continuous stream you swipe through.
+
+There's no page limit and no file size cap. That said, a huge scan is a slow scan on venue wifi, so keep them reasonable.
 
 ### Can I use this for original songs?
 

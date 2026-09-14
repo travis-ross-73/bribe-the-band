@@ -56,13 +56,13 @@ This is intentionally minimal. When someone uses a Crowd Page we collect:
 
 **We never see card numbers.** Card and wallet details are entered directly into Stripe's payment form and transmitted to Stripe. They do not pass through our servers.
 
-**Notes are not private.** A note you write is shown to the Performer on their own device, and may also appear alongside the song on the public request queue that everyone in the room can see on their phone. Don't put anything in a note you wouldn't want the room to read.
+**Notes go to the performer, not the room.** A note you write is shown to the Performer on their own device. It isn't displayed on the public request queue. If you write identifying information into a note, it's stored with the request as you wrote it.
 
 ## 4. What's public
 
-A Performer's Crowd Page publicly shows: the Performer's display name and handle, the song titles and artist names in tonight's set, which songs are currently in the queue, the total tip amount attached to a queued song, any note submitted with a request, and a recently-played list.
+A Performer's Crowd Page publicly shows: the Performer's display name and handle, the song titles and artist names in tonight's set, which songs are currently in the queue, the total tip amount attached to a queued song, and a recently-played list.
 
-It does **not** show: chord charts, keys, capo notes, who requested what, or individual tip amounts tied to an individual person.
+It does **not** show: chord charts, keys, capo notes, the notes people submit with a request, who requested what, or individual tip amounts tied to an individual person.
 
 **How chord charts are stored.** Charts are for the Performer and any bandmates they've invited to a live gig. They are never displayed on a Crowd Page and never shown to an audience. Chart files themselves are held with our storage provider at long, randomly generated addresses that are not linked from, listed on, or discoverable through any public page — but anyone who obtains a file's exact address could open it directly. We're moving chart storage behind signed links that expire. Until that's done, treat a chart's file address the way you'd treat a share link: don't pass it around.
 
@@ -152,7 +152,7 @@ We may update this policy. The effective date at the top always reflects the cur
 
 **Before this can be published truthfully, confirm each of these against the live system:**
 
-1. ~~Are optional notes public?~~ **Resolved 2026-09-13** — notes are shown to the Performer *and* may appear on the public queue. Sections 3 and 4 updated. `request.html`'s note-field placeholder must be updated to match (see the Refund & Request Policy draft, microcopy C).
+1. ~~Are optional notes public?~~ **Verified 2026-09-14 — notes are performer-device only and do not appear on the public queue.** Sections 3 and 4 corrected. (An earlier answer in this project said otherwise; the tested behavior is what's reflected now.) No change needed to the note-field placeholder on this account.
 2. **Chart storage is public-read on Wasabi (confirmed 2026-09-13).** Section 4 is now written to describe this honestly rather than claim privacy the storage doesn't provide. Two things still need doing before it's fully accurate:
    - **Verify the bucket is not enumerable.** Run `curl https://s3.us-east-1.wasabisys.com/songchart`. If that returns an XML object listing, Section 4's "not listed on any public page" claim is false and the bucket policy must be fixed immediately.
    - **Filenames are currently guessable** (`charts/{performer-uuid}/{song-slug}.pdf`). The folder UUID is unguessable, but the slug isn't, so one leaked URL exposes a whole catalog. Section 4 says "randomly generated addresses," which is only true of the folder. Either randomize the object key (add a `chart_object_key` column) or soften that sentence.

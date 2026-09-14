@@ -137,7 +137,7 @@ We are not tax advisors and nothing in these Terms is tax advice.
 
 **The license you give us.** You grant us a non-exclusive, worldwide, royalty-free license to host, store, copy, reformat, and display your content **solely to operate the service for you** — which means displaying it to you, to Bandmates you have invited to a live gig, and to no one else. This license exists so we can run servers; it ends when you delete the content or close your account, subject to reasonable backup retention.
 
-**What the audience sees.** The Crowd Page displays only song titles, artist names, the Performer's display name, the queue, and any notes submitted with a request. **Charts, keys, and capo notes are never displayed to Audience Members.** How chart files themselves are stored and who could reach one directly is described in our Privacy Policy.
+**What the audience sees.** The Crowd Page displays only song titles, artist names, the Performer's display name, and the queue. **Charts, keys, capo notes, and the notes people submit with a request are never displayed to Audience Members.** How chart files themselves are stored and who could reach one directly is described in our Privacy Policy.
 
 **Your warranties about content.** By uploading content you represent that you have the right to do so, and that hosting and displaying it as described will not infringe anyone's copyright or other rights. You may not:
 

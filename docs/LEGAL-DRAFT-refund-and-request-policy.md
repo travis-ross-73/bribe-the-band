@@ -112,9 +112,9 @@ Must be visible without scrolling or tapping anything. Small text is fine; hidde
 
 ## C. Crowd page — the optional note field placeholder
 
-Notes are shown to the performer *and* may appear on the public request queue, so the current placeholder ("dedicate it to someone, request an occasion, whatever you'd like") invites people to write things they may not realize the room can see. Replace with:
+**Verified 2026-09-14: notes are performer-device only.** The existing placeholder ("dedicate it to someone, request an occasion, whatever you'd like") is accurate and needs no change. Optionally add reassurance, since "who sees this?" is a fair thing for a tipper to wonder:
 
-> Add a note (optional) — the band sees this, and it may show up on the request list, so keep it friendly.
+> Add a note (optional) — only the band sees this. Dedicate it to someone, request an occasion, whatever you'd like.
 
 ## D. Crowd page — the tip-only flow
 
