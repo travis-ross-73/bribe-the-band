@@ -1077,6 +1077,7 @@
         <a id="sg-link-url" class="sg-link-url" href="#" target="_blank" rel="noopener">—</a>
         <button class="tiny" id="sg-open-link-btn">Open It</button>
       </div>
+      <div id="sg-origin-warn"></div>
       <label style="display:flex;align-items:flex-start;gap:9px;font-size:0.88rem;line-height:1.45;cursor:pointer;">
         <input type="checkbox" id="sg-confirm-link" style="margin-top:3px;" />
         <span>I opened that link and it's my page. Build my QR code.</span>
@@ -3510,6 +3511,7 @@
   // `performer.handle`.
 
   const SG_TPL_STORAGE_KEY = 'btb-signage-prefs';
+  const SG_LIVE_HOSTS = ['bribetheband.live', 'www.bribetheband.live'];
 
   const SG_SIZES = [
     { id: 'letter',   group: 'US',      label: 'Letter',       sub: '8.5 × 11 in',   w: 215.9, h: 279.4 },
@@ -3571,7 +3573,7 @@
   let sgInited = false, sgQrLibPromise = null, sgQrDataUrl = null, sgQrForUrl = null;
 
   const sgEl = {};
-  ['sg-link-url','sg-open-link-btn','sg-confirm-link','sg-confirm-note','sg-builder',
+  ['sg-link-url','sg-open-link-btn','sg-confirm-link','sg-confirm-note','sg-builder','sg-origin-warn',
    'sg-template-row','sg-theme-row','sg-size-row','sg-ink-warn','sg-headline','sg-band','sg-sub',
    'sg-show-url','sg-scaler','sg-scan-warn','sg-size-readout','sg-export-status',
    'sg-pdf-btn','sg-print-btn','sg-png-btn','sg-jpg-btn'
@@ -3981,6 +3983,16 @@
     const url = sgCrowdUrl();
     sgEl['sg-link-url'].textContent = url;
     sgEl['sg-link-url'].href = url;
+
+    // The printed code is whatever origin this console is being served from.
+    // That's fine for the copy-link button — a wrong link is a two-second
+    // fix — but a stack of postcards pointing at a staging domain isn't
+    // fixable at all, so say so loudly before anything gets printed.
+    if (sgEl['sg-origin-warn']) {
+      sgEl['sg-origin-warn'].innerHTML = SG_LIVE_HOSTS.includes(window.location.hostname)
+        ? ''
+        : `<div class="sg-note err">You're on <strong>${escapeHtml(window.location.host)}</strong>, not bribetheband.live. Anything printed from here points at this address permanently. Open the live console at bribetheband.live before printing something you're going to hand out.</div>`;
+    }
     if (!sgState.band) {
       sgState.band = performer.display_name || performer.handle;
       if (sgEl['sg-band']) sgEl['sg-band'].value = sgState.band;
