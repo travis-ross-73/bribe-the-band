@@ -739,9 +739,9 @@
       </div>
 
       <div id="follower-link-panel" class="hidden">
-        <h3>Followers<span class="info-wrap"><button type="button" class="info-icon" aria-label="More info">i</button><div class="info-popover hidden">Invite a bandmate to follow tonight's set on their own account — share this link or read them the code. They'll log in (or create a free account) and automatically follow along; you'll see them listed below and can remove anyone anytime. Removed automatically when tonight's gig ends.</div></span></h3>
+        <h3>Bandmates<span class="info-wrap"><button type="button" class="info-icon" aria-label="More info">i</button><div class="info-popover hidden">Invite a bandmate to join tonight's set on their own account — share this link or read them the code. They'll log in (or create a free account) and sync automatically; you'll see them listed below and can remove anyone anytime. Removed automatically when tonight's gig ends.</div></span></h3>
         <div class="crowd-link-row">
-          <span class="crowd-link-label">Follower join link</span>
+          <span class="crowd-link-label">Bandmate join link</span>
           <a id="follower-join-link-url" class="crowd-link-url" href="#" target="_blank" rel="noopener">—</a>
           <button class="tiny" id="copy-follower-link-btn">Copy Link</button>
         </div>
@@ -913,7 +913,7 @@
     </section>
 
     <section id="followed-gigs-section" class="hidden">
-      <h2>Gigs You've Followed<span class="info-wrap"><button type="button" class="info-icon" aria-label="More info">i</button><div class="info-popover hidden">Gigs where you joined as a Follower on someone else's account, filtered by the same range above. This isn't your own money — it's shown here so you can see how the night went, not as anything you earned.</div></span></h2>
+      <h2>Gigs You've Joined<span class="info-wrap"><button type="button" class="info-icon" aria-label="More info">i</button><div class="info-popover hidden">Gigs where you joined as a Bandmate on someone else's account, filtered by the same range above. This isn't your own money — it's shown here so you can see how the night went, not as anything you earned.</div></span></h2>
       <div id="followed-gigs-summary" class="report-summary-grid"></div>
       <div id="followed-gigs-list"></div>
     </section>
@@ -970,10 +970,10 @@
     </section>
 
     <section>
-      <h2>Follow Someone Else's Gig<span class="info-wrap"><button type="button" class="info-icon" aria-label="More info">i</button><div class="info-popover hidden">Have a gig code from another performer? Enter it here to follow along on your own account. This works independently of your own gig, whether or not you have one running.</div></span></h2>
+      <h2>Join a Bandmate's Gig<span class="info-wrap"><button type="button" class="info-icon" aria-label="More info">i</button><div class="info-popover hidden">Have a gig code from another performer? Enter it here to join on your own account. This works independently of your own gig, whether or not you have one running.</div></span></h2>
       <div class="button-row" style="align-items:center;">
         <input type="text" id="follow-gig-code-input" placeholder="Gig code" style="margin-bottom:0; text-transform:uppercase;" />
-        <button class="secondary" id="follow-gig-btn">Follow</button>
+        <button class="secondary" id="follow-gig-btn">Join</button>
       </div>
       <div class="manage-song-status" id="follow-gig-status"></div>
     </section>
@@ -1479,19 +1479,19 @@
     }
     const { data, error } = await supabase.rpc('get_gig_followers', { p_gig_session_id: activeGig.id });
     if (error || !data || data.length === 0) {
-      followerRosterEl.innerHTML = '<div class="empty-note">No one has joined as a Follower yet tonight.</div>';
+      followerRosterEl.innerHTML = '<div class="empty-note">No one has joined as a Bandmate yet tonight.</div>';
       return;
     }
-    followerRosterEl.innerHTML = `<div class="builder-col-label" style="margin-top:10px;">Following tonight (${data.length})</div>` +
+    followerRosterEl.innerHTML = `<div class="builder-col-label" style="margin-top:10px;">Bandmates tonight (${data.length})</div>` +
       data.map(f => `
         <div class="top-song-row">
-          <span>${escapeHtml(f.display_name || f.handle || 'A follower')}</span>
+          <span>${escapeHtml(f.display_name || f.handle || 'A bandmate')}</span>
           <button class="tiny" data-remove-follower="${f.gig_follower_id}">Remove</button>
         </div>
       `).join('');
     followerRosterEl.querySelectorAll('[data-remove-follower]').forEach(btn => {
       btn.addEventListener('click', async () => {
-        if (!confirm('Remove this follower? They will stop following your live set.')) return;
+        if (!confirm('Remove this bandmate? They will stop seeing your live set.')) return;
         await supabase.rpc('remove_gig_follower', { p_gig_follower_id: btn.dataset.removeFollower });
         loadFollowerRoster();
       });
@@ -3107,7 +3107,7 @@
       const followedTips = requests.filter(r => followedGigIds.has(r.gig_session_id)).reduce((sum, r) => sum + Number(r.tip_amount || 0), 0);
       lifetimeSummaryEl.innerHTML += `
         <div class="report-stat"><div class="report-stat-value">${formatMoney(soloTips)}</div><div class="report-stat-label">Tips — solo gigs</div></div>
-        <div class="report-stat"><div class="report-stat-value">${formatMoney(followedTips)}</div><div class="report-stat-label">Tips — gigs with Followers</div></div>
+        <div class="report-stat"><div class="report-stat-value">${formatMoney(followedTips)}</div><div class="report-stat-label">Tips — gigs with Bandmates</div></div>
       `;
     }
 
@@ -3188,7 +3188,7 @@
           <div class="gig-report-top">
             <div>
               <span class="gig-report-date">${dateLabel}</span>
-              <span class="gig-report-status"> — ${g.status === 'active' ? 'live now' : 'ended'} · ${escapeHtml(g.gig_code)}${g.followerCount > 0 ? ` · 👥 Followed gig — ${g.followerCount} joined` : ''}</span>
+              <span class="gig-report-status"> — ${g.status === 'active' ? 'live now' : 'ended'} · ${escapeHtml(g.gig_code)}${g.followerCount > 0 ? ` · 👥 ${g.followerCount} bandmate${g.followerCount === 1 ? '' : 's'} joined` : ''}</span>
             </div>
             <div class="gig-report-stats">${gigSongRequests.length} requests · ${formatMoney(gigTips)}${gigNeverPlayed > 0 ? ` · ${gigNeverPlayed} never played` : ''}</div>
           </div>
@@ -3217,7 +3217,7 @@
     followedGigsSummaryEl.innerHTML = `
       <div class="report-stat"><div class="report-stat-value">${formatMoney(lifetimeFollowedTips)}</div><div class="report-stat-label">Tips raised (not yours)</div></div>
       <div class="report-stat"><div class="report-stat-value">${lifetimeFollowedSongRequests}</div><div class="report-stat-label">Song requests</div></div>
-      <div class="report-stat"><div class="report-stat-value">${followedGigs.length}</div><div class="report-stat-label">Gigs followed</div></div>
+      <div class="report-stat"><div class="report-stat-value">${followedGigs.length}</div><div class="report-stat-label">Gigs joined</div></div>
     `;
 
     followedGigsListEl.innerHTML = followedGigs.map(g => {
@@ -3260,7 +3260,7 @@
           <div class="gig-report-top">
             <div>
               <span class="gig-report-date">${dateLabel}</span>
-              <span class="gig-report-status"> — Followed ${escapeHtml(masterName)}${g.gig_status !== 'active' ? '' : ' · still live'}</span>
+              <span class="gig-report-status"> — Joined ${escapeHtml(masterName)}${g.gig_status !== 'active' ? '' : ' · still live'}</span>
             </div>
             <div class="gig-report-stats">${gigSongRequests.length} requests · ${formatMoney(gigTips)}</div>
           </div>
