@@ -370,6 +370,22 @@
   }
   .hidden { display: none !important; }
   .note-hint { color: rgba(244,228,200,0.4); font-size: 0.75rem; margin: 0 0 12px; }
+  /* Point-of-purchase refund disclosure. Card-network dispute rules turn on
+     whether this was shown at the moment of payment, so it must sit in the
+     normal flow above the pay button — never behind a toggle, an accordion or
+     a link. Small type is fine; hidden is not. */
+  .pay-disclosure {
+    font-size: 0.75rem;
+    line-height: 1.45;
+    color: rgba(244,228,200,0.58);
+    background: rgba(244,228,200,0.04);
+    border: 1px solid rgba(244,228,200,0.10);
+    border-radius: 6px;
+    padding: 9px 11px;
+    margin: 0 0 12px;
+  }
+  .pay-disclosure strong { color: rgba(244,228,200,0.82); font-weight: 700; }
+  .confirmation-note { color: rgba(244,228,200,0.45); font-size: 0.8rem; margin: 8px 0 0; max-width: 300px; }
 </style>
 </head>
 <body>
@@ -447,6 +463,8 @@
   <input type="text" id="note-input" placeholder='e.g. &quot;For Sarah&quot; or &quot;Happy Birthday to Eric!&quot;' maxlength="120" />
   <div class="note-hint">Add a note (optional) — dedicate it to someone, request an occasion, whatever you'd like.</div>
 
+  <div id="pay-disclosure" class="pay-disclosure hidden"></div>
+
   <button id="submit-request">Send Request</button>
   <div id="cancel-request">Cancel</div>
 </div>
@@ -454,6 +472,7 @@
 <div id="confirmation" class="hidden">
   <h2 id="confirmation-title">Request sent! 🎶</h2>
   <p id="confirmation-subtitle">The band has your request — thanks for the tip!</p>
+  <p id="confirmation-note" class="confirmation-note"></p>
   <div class="countdown" id="countdown-text"></div>
 </div>
 
@@ -487,6 +506,40 @@
   // Mirrored server-side by MIN_TIP in api/create-payment-intent.js; the
   // client check is a convenience, that one is the control.
   const MIN_CUSTOM_TIP = 3;
+
+  // Must match the shortened descriptor set on the Stripe platform account.
+  // Stripe rejected the originally-specced BTB-TIP (a shortened descriptor may
+  // not be a product description), so this is BRIBEBAND — see
+  // api/create-payment-intent.js. If that ever changes, change this with it or
+  // the crowd page starts telling people the wrong thing to look for.
+  const STATEMENT_DESCRIPTOR = 'BRIBEBAND';
+
+  // Renders the point-of-purchase disclosure. Three cases, because one panel
+  // serves all three entry points (new request, boost, tip-only) and the same
+  // sentence is wrong in two of them: "requests aren't guaranteed" is nonsense
+  // for a tip with no song attached, and a boost needs to say what boosting
+  // does and doesn't buy. Hidden entirely on the $0 path — "tips are final and
+  // non-refundable" above a free request reads as a bug and undermines the
+  // credibility of everything else on the page.
+  function updatePayDisclosure() {
+    const amount = currentTipAmount();
+    if (!(amount > 0)) {
+      payDisclosure.classList.add('hidden');
+      payDisclosure.innerHTML = '';
+      return;
+    }
+    const statementLine = ` Appears on your statement as <strong>${STATEMENT_DESCRIPTOR}</strong>.`;
+    let body;
+    if (isTipOnly) {
+      body = 'A tip with no song attached is just a thank-you. Non-refundable, and there\'s nothing to play.';
+    } else if (selectedSong && queueBySong.has(selectedSong.id)) {
+      body = 'Boosting moves this song up the list the crowd sees. It doesn\'t guarantee it gets played, and boosts are non-refundable.';
+    } else {
+      body = '<strong>Requests aren\'t guaranteed.</strong> Your tip is a thank-you to the performer — they decide what to play and may not get to every song. Tips are final and non-refundable.';
+    }
+    payDisclosure.innerHTML = body + statementLine;
+    payDisclosure.classList.remove('hidden');
+  }
 
   // --- State ------------------------------------------------------------
   let songs = [];
@@ -552,6 +605,8 @@
   const confirmation = document.getElementById('confirmation');
   const confirmationTitle = document.getElementById('confirmation-title');
   const confirmationSubtitle = document.getElementById('confirmation-subtitle');
+  const confirmationNote = document.getElementById('confirmation-note');
+  const payDisclosure = document.getElementById('pay-disclosure');
   const countdownText = document.getElementById('countdown-text');
   const mainEl = document.querySelector('main');
 
@@ -1031,6 +1086,7 @@
     submitBtn.disabled = true;
     submitBtn.textContent = 'Send Request';
     teardownPaymentElement();
+    updatePayDisclosure();
   }
 
   // Tears down any mounted Payment Element / created PaymentIntent so the
@@ -1177,6 +1233,7 @@
         submitBtn.disabled = false;
       }
     }
+    updatePayDisclosure();
   });
 
   customTipInput.addEventListener('input', () => {
@@ -1184,6 +1241,7 @@
     const valid = val >= MIN_CUSTOM_TIP;
     submitBtn.disabled = !valid;
     submitBtn.textContent = valid ? `Pay $${val.toFixed(2)} & Send` : 'Send Request';
+    updatePayDisclosure();
 
     if (paymentIntentDebounceTimer) clearTimeout(paymentIntentDebounceTimer);
     if (!valid) {
@@ -1305,9 +1363,11 @@
     if (isTipOnly) {
       confirmationTitle.textContent = 'Tip sent! 🎶';
       confirmationSubtitle.textContent = 'Thanks so much for the support!';
+      confirmationNote.textContent = '';
     } else {
       confirmationTitle.textContent = 'Request sent! 🎶';
       confirmationSubtitle.textContent = 'The band has your request — thanks!';
+      confirmationNote.textContent = "They'll play what they can get to tonight.";
     }
     mainEl.classList.add('hidden');
     tipOnlyCard.classList.add('hidden');
