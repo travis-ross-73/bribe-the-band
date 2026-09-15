@@ -12,6 +12,10 @@ Written to be handed to a Claude Code session with access to the git repo, Verce
 
 **Priority:** Tasks 1–5 are marked **PRE-GIG** — there's a live band gig in six days and bandmates creating accounts this week. Everything else can follow.
 
+**Revised 2026-09-14** after a codebase review flagged five places where this scope didn't match reality. Tasks 2, 3, 4, 7 and 9 are corrected in place and marked. Task 12 was added as a result. Task 1's code-level claims were spot-checked and hold — `api/wasabi-upload-url.js:87` builds `charts/${performer.id}/${songSlug}.pdf` exactly as described, and the delete path mirrors it.
+
+**Useful finding from that review:** `main` and `staging` are byte-identical across `console.html`, `request.html` and `viewer.html` except for the Supabase URL, the Supabase anon key, and the Stripe publishable key. Every task here ports from staging to production as a clean patch with three lines to watch. That makes the staging-first constraint cheap to honor rather than a duplication tax.
+
 ---
 
 ## Task 1 — Randomize chart object keys
@@ -94,11 +98,18 @@ Credentials: the existing dedicated Wasabi sub-user (`WASABI_ACCESS_KEY_ID` / `W
 
 In the Stripe dashboard, set **Shortened descriptor** to `BTB-TIP` and the full statement descriptor to `BRIBETHEBAND.LIVE`. (If Stripe rejects the two as dissimilar, use `BRIBETHEBAND` as the root for both.)
 
-In `api/create-payment-intent.js`, pass `statement_descriptor_suffix` on the PaymentIntent, derived from the performer's display name:
+In `api/create-payment-intent.js`, pass `statement_descriptor_suffix` on the PaymentIntent.
+
+**Where the name comes from — corrected 2026-09-14.** The task originally assumed the performer name was already available here. It isn't: `get_performer_payout_info()` returns only `stripe_account_id`, `fee_percentage`, and `is_house_account`. `performers.display_name` is anon-readable (the crowd page reads it directly), so this is one extra `select`, not a migration or an RPC change. It's a read, so the anon-key RLS constraint doesn't apply.
+
+**Which name to use — use `gig_sessions.display_name_override`, falling back to `performers.display_name`.** Code raised this and the reasoning is right: the override is what the crowd page actually renders, so it's what was on the tipper's screen at the moment they paid. The entire point of the descriptor is recognition four days later, and recognition attaches to what they saw. If Travis's account is "Travis Ross" but the night's override said "Ten Cent Prophet," the statement should say Ten Cent Prophet.
+
+Sanitization:
 
 - Uppercase, strip everything outside `A–Z 0–9 space`, collapse whitespace, trim to **13 characters**.
 - Combined limit is 22 including the `PREFIX* ` join, so `BTB-TIP` (7) plus separator leaves 13.
 - If the sanitized result is empty, omit the parameter entirely so the default descriptor applies. Don't pass an empty string.
+- Truncation should cut on a word boundary where one falls within a character or two of the limit — `TEN CENT` reads better than `TEN CENT PROP`.
 
 Result on a statement: `BTB-TIP* TEN CENT PRO`.
 
@@ -112,9 +123,13 @@ The tipper remembers the band, not the platform. This is the single most common 
 
 **PRE-GIG.**
 
-Change crowd page presets from `$2 / $5 / $10 / Custom` to **`$5 / $10 / $20 / Custom`**.
+**Corrected 2026-09-14.** There are **five** buttons, not four: `$2 / $5 / $10 / Custom / No Tip` (`request.html:429-434`). **No Tip is a real $0 free-request path that never creates a PaymentIntent at all.**
 
-Enforce a **$3 minimum** on Custom, client-side and server-side. At 10% plus Stripe's 2.9% + 30¢, a $1 tip nets the performer about $0.57 — 43% gone. Nobody is served by that.
+Change the paid presets from `$2 / $5 / $10` to **`$5 / $10 / $20`**. Leave Custom and No Tip in place.
+
+**The minimum applies to the paid path only.** A naive "$3 minimum" on the panel would kill free requests, which are a legitimate and valuable feature — someone with no money who still wants to hear a song is exactly the person who makes the crowd page feel like part of the show rather than a payment terminal. Guard the minimum on the custom-amount input and on `create-payment-intent.js`, both of which only run when an amount is being charged.
+
+Enforce a **$3 minimum on Custom**, client-side and server-side. At 10% plus Stripe's 2.9% + 30¢, a $1 tip nets the performer about $0.57 — 43% gone. Nobody is served by that.
 
 **Make the minimum visible rather than a validation error.** Helper text under the Custom field before anyone types:
 
@@ -132,18 +147,27 @@ Server-side, reject amounts under $3 in `create-payment-intent.js` — client va
 
 Card network dispute rules turn on whether the refund policy was disclosed *at the point of purchase*. A policy page nobody read does very little; this text does the work. Ship it before the policy pages exist.
 
-Full strings are in `LEGAL-DRAFT-refund-and-request-policy.md` under "Required UI microcopy." Four placements:
+Full strings are in `LEGAL-DRAFT-refund-and-request-policy.md` under "Required UI microcopy."
 
-- **A** — above the pay button on the payment screen. Must be visible without scrolling or expanding anything. Small type is fine; behind a disclosure triangle is not.
-- **B** — Boost confirmation.
-- **D** — tip-only flow.
-- **E** — one added line on the success screen.
+**Corrected 2026-09-14 — this is one surface, not four.** A single `#request-panel` serves every entry point, with the Stripe Payment Element mounting inline. Boost reopens that panel with the song preselected (`request.html:876`); tip-only reopens it with the title swapped (`request.html:1137`). Only **E** (success screen) is genuinely separate.
+
+So: **one disclosure block inside the panel, with conditional text**, plus the one added line on the success screen. Cheaper than written.
+
+Three conditions to key off:
+
+- **No Tip selected → hide the block entirely.** "Tips are final and non-refundable" sitting above a free request reads as a bug and undermines the credibility of everything else on the page.
+- **Tip-only (no song) →** use string D's framing. There's nothing to play, so "requests aren't guaranteed" is nonsense.
+- **Song + payment →** the full string A text.
 
 Use `BTB-TIP` in the "appears on your statement as" line, matching Task 2.
 
 **Do not ship microcopy C.** Notes were verified on 2026-09-14 as performer-device only, so the existing placeholder is accurate. Optional improvement only: *"Add a note (optional) — only the band sees this."*
 
-Where the strings reference `/refunds`, link them even though the page doesn't exist yet — wire the href now, publish the page in Stage 3.
+### The `/refunds` link is a trap — don't wire it yet
+
+`vercel.json` ends with a catch-all rewrite `/:handle → /request.html`. So `/refunds` doesn't 404 today — **it renders a crowd page for a performer whose handle is "refunds."** Shipping that href now ships a link that lands somewhere broken and confusing.
+
+**Leave it as plain text for now**, or add the `/refunds` rewrite first. See Task 12, which generalizes this.
 
 ---
 
@@ -169,7 +193,11 @@ Make `/get-started` the single signup surface with a working form. Redirect `sig
 
 ## Task 7 — Clean URLs
 
-Route `/login` → `console.html` and keep the existing `/signup` rewrite pattern. Update every nav link, CTA, and internal reference so no raw `.html` filename appears in the UI. Keep the old paths working as redirects.
+**Corrected 2026-09-14: only the `/signup` rewrite exists. `/login` does not.**
+
+Add `/login` → `console.html`. Update every nav link, CTA, and internal reference so no raw `.html` filename appears in the UI. Keep the old paths working as redirects.
+
+Note the ordering constraint from Task 12: any new named path must be added above the `/:handle` catch-all in `vercel.json`, or it gets swallowed.
 
 ---
 
@@ -189,11 +217,31 @@ Multi-page charts work correctly and should stay unlimited in page count. No cha
 
 ## Task 9 — Fix `/demo`
 
-`/demo` is the destination of the homepage's "See a live crowd page" link and currently renders "Offstage — For Now," "Loading songs…," and "Nothing's been requested yet." Your highest-intent link demonstrates an empty app.
+**Corrected 2026-09-14 — the original diagnosis was wrong.** `/demo` is not a broken link or a routing bug. It hits the same `/:handle` catch-all every crowd page uses, and it's correctly rendering the legitimate "Offstage — For Now" state for a real handle with no active gig. The page is working exactly as designed.
 
-Seed it so it always renders a populated, live-looking crowd page: a real setlist, two or three songs already queued with dollar amounts, a Last Call banner, an expanded Recently Played list. Static seed data is fine — it doesn't need to be a real gig, it needs to look like one.
+**So the fix is data, not routing:** seed a demo account with a gig that stays permanently live — a real setlist, two or three songs already queued with dollar amounts, a Last Call banner, an expanded Recently Played list.
 
-Make the tip buttons non-functional or clearly demo-only so nobody is charged.
+**First, confirm production has a demo account at all.** Project notes suggest it may only ever have been set up on staging, in which case this is a create rather than an update.
+
+Make the tip buttons non-functional or clearly demo-only so nobody is charged. Consider whether a permanently-live gig interferes with any scheduled job or reporting query that assumes gigs end.
+
+---
+
+## Task 12 — Reserved paths and handle collisions
+
+**Not pre-gig, but it blocks Stage 3 and Stage 4, so it wants doing before either.**
+
+`vercel.json` ends with a catch-all rewrite `/:handle → /request.html`. Two consequences the earlier scope missed:
+
+**1. Every new named path must be registered above the catch-all.** `/refunds`, `/terms`, `/privacy`, `/pricing`, `/faq`, `/about`, `/login` — each one silently renders a crowd page until it's explicitly routed. This is why Task 4's `/refunds` href is held back.
+
+**2. Handles can collide with future pages, and possibly already can.** Check whether signup validates against a reserved list. If it doesn't, someone can register the handle `terms` or `pricing` today, and publishing that page later either breaks their page or is blocked by it. Squatting is unlikely at current scale but the fix is cheap and gets expensive to retrofit once handles are in use.
+
+Add a reserved-handle list covering: existing app paths (`signup`, `login`, `console`, `viewer`, `request`, `demo`, `admin`, `api`, `get-started`), the legal and marketing pages (`terms`, `privacy`, `refunds`, `pricing`, `faq`, `about`, `contact`, `support`, `help`, `blog`), and obvious reserved words (`www`, `mail`, `static`, `assets`). Validate at signup and on any future handle change.
+
+The Terms draft §4 already claims this right — *"we may reclaim a handle that violates this section"* — so enforcement matches what's being published.
+
+**Check whether any existing handle already collides** before adding the list, so the validation doesn't orphan a live account.
 
 ---
 
@@ -228,7 +276,7 @@ Rewrite around the half that's true — **you do know it, and the chart is alrea
 
 **This week, before the gig:** 5 (bandmates see it), 2, 3, 4. Then 1 if there's room — it's the biggest and shouldn't be rushed the day before a show.
 
-**Next:** 1 (if not done), 9, 8, 6, 7.
+**Next:** 1 (if not done), 12, 9, 8, 6, 7. Task 12 moves up because it gates the legal and marketing pages, and because the handle-collision check gets more expensive with every account created.
 
 **After the legal pages exist:** 10, 11.
 
