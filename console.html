@@ -784,11 +784,11 @@
   @media screen and (max-width: 560px) { .sg-stage { padding: 10px; } }
 
   /* ---------- print: the piece at 1:1, nothing else ---------- */
-  #sg-print-root { display: none; }
+  #sg-print-root { position: fixed; left: -20000px; top: 0; width: 0; height: 0; }
   @media print {
     body.sg-printing { background: #fff !important; }
     body.sg-printing > *:not(#sg-print-root) { display: none !important; }
-    body.sg-printing #sg-print-root { display: block !important; }
+    body.sg-printing #sg-print-root { position: static; width: auto; height: auto; }
   }
 </style>
 </head>
@@ -3586,10 +3586,10 @@
   // read across a room.
   const SG_FONTS = [
     { id: 'house',     label: 'House',     sub: 'Per template' },
-    { id: 'condensed', label: 'Condensed', sub: 'Oswald',            google: 'Oswald:wght@500;700',  stack: "'Oswald', 'Inter', sans-serif" },
-    { id: 'slab',      label: 'Slab',      sub: 'Alfa Slab One',     google: 'Alfa+Slab+One',        stack: "'Alfa Slab One', Georgia, serif" },
-    { id: 'marker',    label: 'Marker',    sub: 'Permanent Marker',  google: 'Permanent+Marker',     stack: "'Permanent Marker', 'Inter', sans-serif" },
-    { id: 'grotesk',   label: 'Grotesk',   sub: 'Space Grotesk',     google: 'Space+Grotesk:wght@500;700', stack: "'Space Grotesk', 'Inter', sans-serif" }
+    { id: 'condensed', label: 'Condensed', sub: 'Oswald',            google: 'Oswald:wght@500;700',        stack: "'Oswald', 'Inter', sans-serif",           family: 'Oswald',          weight: 700 },
+    { id: 'slab',      label: 'Slab',      sub: 'Alfa Slab One',     google: 'Alfa+Slab+One',              stack: "'Alfa Slab One', Georgia, serif",         family: 'Alfa Slab One',   weight: 400 },
+    { id: 'marker',    label: 'Marker',    sub: 'Permanent Marker',  google: 'Permanent+Marker',           stack: "'Permanent Marker', 'Inter', sans-serif", family: 'Permanent Marker', weight: 400 },
+    { id: 'grotesk',   label: 'Grotesk',   sub: 'Space Grotesk',     google: 'Space+Grotesk:wght@500;700', stack: "'Space Grotesk', 'Inter', sans-serif",    family: 'Space Grotesk',   weight: 700 }
   ];
 
   const SG_DEFAULTS = { headline: 'SEE OUR ENTIRE SONG LIST!', sub: 'SCAN THE CODE · PICK A SONG · TIP THE BAND' };
@@ -3633,6 +3633,22 @@
       }));
     }
     return sgFontLoads.get(font.id);
+  }
+
+  // `document.fonts.ready` is not enough on its own: right after a Google
+  // Fonts stylesheet loads it resolves immediately, while the face itself is
+  // still unavailable — so text measures against the fallback, the fitter
+  // decides it fits, and then the real font swaps in wider and gets clipped
+  // by the slot's overflow:hidden. Silently. Load the specific faces first,
+  // then wait.
+  async function sgFontsSettled() {
+    const font = sgFont();
+    const specs = ["700 40px 'Inter'", "800 40px 'Inter'", "700 40px 'Bodoni Moda'"];
+    if (font.family) specs.push(`${font.weight || 700} 40px '${font.family}'`);
+    try {
+      await Promise.all(specs.map(spec => document.fonts.load(spec).catch(() => {})));
+      await document.fonts.ready;
+    } catch (e) { /* older browsers: fit against whatever's loaded */ }
   }
 
   // Loaded on first use rather than at page load — the console is opened
@@ -3772,7 +3788,7 @@
       span.style.fontSize = '';
       const base = parseFloat(getComputedStyle(box).fontSize);
       let ratio = 1, guard = 0;
-      while (guard++ < 70 && ratio > 0.34 &&
+      while (guard++ < 90 && ratio > 0.28 &&
              (span.scrollWidth > box.clientWidth + 0.5 || span.scrollHeight > box.clientHeight + 0.5)) {
         ratio *= 0.96;
         span.style.fontSize = (base * ratio) + 'px';
@@ -3785,7 +3801,7 @@
   // combination overflows a page, back the code off until it fits. Returns
   // true when it had to intervene, so the preview can say so.
   function sgClampToFit(root) {
-    let clamped = false;
+    let clamped = null;
     // A portrait piece IS the page; only a tent sheet has pages inside it.
     const pages = [root, ...root.querySelectorAll('.sg-page')]
       .filter(el => el.classList && el.classList.contains('sg-page'));
@@ -3795,30 +3811,43 @@
       const over = () => boxes.some(b => b.scrollHeight > b.clientHeight + 1 || b.scrollWidth > b.clientWidth + 1);
       if (!over()) return;
 
-      // Give back QR size first — it's the single biggest block on the page.
-      let qrMm = parseFloat(getComputedStyle(page).getPropertyValue('--qr'));
-      const qrFloor = qrMm * 0.4;
-      let guard = 0;
-      while (guard++ < 40 && over() && qrMm > qrFloor) {
-        qrMm *= 0.94;
-        page.style.setProperty('--qr', qrMm.toFixed(2) + 'mm');
-        sgFitText(page);
-        clamped = true;
-      }
-
-      // Still over? Then the type itself is too large for the page — no
-      // amount of QR shrinking fixes that, so bring the whole scale down.
+      // Type yields first. Giving up QR size first is backwards for this
+      // piece: the code's size is the whole reason it works from across a
+      // room, so it's the last thing surrendered, never the first.
       let fs = parseFloat(getComputedStyle(page).fontSize);
-      const fsFloor = fs * 0.6;
-      guard = 0;
+      const fsFloor = fs * 0.7;
+      let guard = 0;
       while (guard++ < 40 && over() && fs > fsFloor) {
-        fs *= 0.95;
+        fs *= 0.96;
         page.style.fontSize = fs + 'px';
         sgFitText(page);
-        clamped = true;
+        clamped = 'text';
+      }
+
+      // Only if shrinking the words wasn't enough, and never below something
+      // still worth printing.
+      let qrMm = parseFloat(getComputedStyle(page).getPropertyValue('--qr'));
+      const qrFloor = Math.max(35, qrMm * 0.6);
+      guard = 0;
+      while (guard++ < 40 && over() && qrMm > qrFloor) {
+        qrMm *= 0.96;
+        page.style.setProperty('--qr', qrMm.toFixed(2) + 'mm');
+        sgFitText(page);
+        clamped = 'qr';
       }
     });
     return clamped;
+  }
+
+  // A slot that still overflows is clipped by its own overflow:hidden, which
+  // hides the failure from every other measurement on the page. This is the
+  // only thing that catches it, so nothing ships cropped.
+  function sgClippedSlots(root) {
+    return Array.from(root.querySelectorAll('.sg-fit')).filter(box => {
+      const span = box.firstElementChild;
+      return span && span.textContent.trim() &&
+        (span.scrollHeight > box.clientHeight + 1 || span.scrollWidth > box.clientWidth + 1);
+    });
   }
 
   function sgQrPhysicalMm(root) {
@@ -3859,11 +3888,19 @@
     sc.style.marginRight = -(boardPx * (1 - scale)) + 'px';
     sc.style.marginBottom = -(boardHPx * (1 - scale)) + 'px';
 
-    try { await document.fonts.ready; } catch (e) { /* older browsers: fit against whatever's loaded */ }
+    await sgFontsSettled();
     sgFitText(board);
     const clamped = sgClampToFit(board);
 
     sgRenderReadouts(board, clamped);
+
+    // Belt and braces: if a face lands later than expected, re-measure once
+    // it has. Skipped if another render has since replaced this board.
+    document.fonts.ready.then(() => {
+      if (sgCurrentArtboard !== board) return;
+      sgFitText(board);
+      sgRenderReadouts(board, sgClampToFit(board));
+    }).catch(() => {});
   }
 
   function sgRenderReadouts(board, clamped) {
@@ -3897,8 +3934,14 @@
     if (squeezed.length) {
       html += `<div class="sg-note">Had to shrink ${[...new Set(squeezed)].join(' and ')} a long way to fit. Shorter wording will read better from across the room.</div>`;
     }
-    if (clamped) {
-      html += `<div class="sg-note">That's as large as the code goes at this text size — it's been held back to keep everything on the page. Turn the text down, or move up a paper size, to push it further.</div>`;
+    if (clamped === 'text') {
+      html += `<div class="sg-note">Text has been scaled back to keep everything on the page at this code size. Turn the QR down, or move up a paper size, for more room.</div>`;
+    } else if (clamped === 'qr') {
+      html += `<div class="sg-note">That's as large as the code goes here — it's been held back to fit the words alongside it. Shorter wording, smaller text, or a bigger sheet will let it grow.</div>`;
+    }
+    const clipped = sgClippedSlots(board);
+    if (clipped.length) {
+      html += `<div class="sg-note err"><strong>Something is being cut off.</strong> Shorten the longest line, or turn the text size down — don't print this as it stands.</div>`;
     }
     sgEl['sg-scan-warn'].innerHTML = html;
 
@@ -3939,6 +3982,12 @@
     clone.style.transform = 'none';
     holder.appendChild(clone);
     document.body.appendChild(holder);
+    // Re-measure the clone in place. By export time every face is loaded, so
+    // this is the last chance to catch a slot that was fitted against a font
+    // that hadn't arrived yet — which is exactly how a cropped headline got
+    // into a PDF once.
+    sgFitText(clone);
+    sgClampToFit(clone);
     const wPx = wMm * 96 / 25.4, hPx = hMm * 96 / 25.4;
     try {
       return await html2canvas(clone, {
@@ -3954,6 +4003,10 @@
 
   async function sgExportPdf() {
     const size = sgSize();
+    if (sgCurrentArtboard && sgClippedSlots(sgCurrentArtboard).length) {
+      sgStatus('Something on the piece is being cut off — shorten the longest line or turn the text size down, then try again.', 'err');
+      return;
+    }
     sgEl['sg-pdf-btn'].disabled = true;
     try {
       // 300 DPI unless the sheet is big enough that the canvas would blow
@@ -3995,6 +4048,8 @@
     const clone = sgCurrentArtboard.cloneNode(true);
     clone.style.transform = 'none';
     root.appendChild(clone);
+    sgFitText(clone);
+    sgClampToFit(clone);
     document.body.classList.add('sg-printing');
     const cleanup = () => {
       document.body.classList.remove('sg-printing');
