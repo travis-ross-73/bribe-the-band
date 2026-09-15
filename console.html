@@ -1090,7 +1090,7 @@
 
     <section>
       <h2>2. Pick a Design</h2>
-      <div class="section-sub">Five layouts, same information. All of them lead with the ask, not the band name — this is a piece for people who are holding a phone, not people reading a bio.</div>
+      <div class="section-sub">Five layouts, same information. All of them lead with the ask, not your name — this is a piece for people who are holding a phone, not people reading a bio.</div>
       <div class="sg-choice-row" id="sg-template-row"></div>
 
       <div class="sg-label" style="margin-top:6px;">Headline type</div>
@@ -1107,15 +1107,15 @@
       <div class="sg-field-grid">
         <div>
           <label class="sg-label" for="sg-headline">The ask <span class="sg-count" id="sg-headline-count"></span></label>
-          <input type="text" id="sg-headline" maxlength="40" placeholder="Request a Song" />
+          <input type="text" id="sg-headline" maxlength="40" placeholder="SEE OUR ENTIRE SONG LIST!" />
         </div>
         <div>
-          <label class="sg-label" for="sg-band">Band name <span class="sg-count" id="sg-band-count"></span></label>
+          <label class="sg-label" for="sg-band">Band/Performer Name <span class="sg-count" id="sg-band-count"></span></label>
           <input type="text" id="sg-band" maxlength="34" placeholder="Ten Cent Prophet" />
         </div>
       </div>
       <label class="sg-label" for="sg-sub">How it works <span class="sg-count" id="sg-sub-count"></span></label>
-      <input type="text" id="sg-sub" maxlength="52" placeholder="Scan &middot; Pick a song &middot; Tip the band" />
+      <input type="text" id="sg-sub" maxlength="52" placeholder="SCAN THE CODE &middot; PICK A SONG &middot; TIP THE BAND" />
       <label style="display:flex;align-items:center;gap:9px;font-size:0.85rem;cursor:pointer;margin-top:4px;">
         <input type="checkbox" id="sg-show-url" checked />
         <span>Print the web address under the code (for anyone whose camera won't cooperate)</span>
@@ -3592,7 +3592,7 @@
     { id: 'grotesk',   label: 'Grotesk',   sub: 'Space Grotesk',     google: 'Space+Grotesk:wght@500;700', stack: "'Space Grotesk', 'Inter', sans-serif" }
   ];
 
-  const SG_DEFAULTS = { headline: 'Request a Song', sub: 'Scan · Pick a song · Tip the band' };
+  const SG_DEFAULTS = { headline: 'SEE OUR ENTIRE SONG LIST!', sub: 'SCAN THE CODE · PICK A SONG · TIP THE BAND' };
 
   let sgState = {
     template: 'marquee', theme: 'bone', size: 'letter', font: 'house',
@@ -3892,7 +3892,7 @@
     const squeezed = Array.from(board.querySelectorAll('.sg-fit'))
       .filter(b => parseFloat(b.dataset.sgRatio || '1') < 0.62 && b.textContent.trim())
       .map(b => b.classList.contains('sg-headline') ? 'the ask'
-              : b.classList.contains('sg-band') ? 'the band name'
+              : b.classList.contains('sg-band') ? 'the band/performer name'
               : b.classList.contains('sg-sub') ? 'the how-it-works line' : 'the web address');
     if (squeezed.length) {
       html += `<div class="sg-note">Had to shrink ${[...new Set(squeezed)].join(' and ')} a long way to fit. Shorter wording will read better from across the room.</div>`;
