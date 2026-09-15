@@ -426,15 +426,16 @@
   <div class="subtitle" id="panel-song-artist">Artist</div>
 
   <div class="tip-options" id="tip-options">
-    <button class="tip-btn" data-amount="2">$2</button>
     <button class="tip-btn" data-amount="5">$5</button>
     <button class="tip-btn" data-amount="10">$10</button>
+    <button class="tip-btn" data-amount="20">$20</button>
     <button class="tip-btn" data-amount="custom">Custom</button>
     <button class="tip-btn" data-amount="0">No Tip</button>
   </div>
 
   <div id="custom-tip-wrap" class="hidden">
-    <input type="number" min="1" step="1" id="custom-tip-input" placeholder="$ amount" />
+    <input type="number" min="3" step="1" id="custom-tip-input" placeholder="$ amount" />
+    <div class="note-hint" style="margin-bottom:0;">Minimum $3 — card fees eat most of anything smaller.</div>
   </div>
 
   <div id="payment-element-wrap" class="hidden">
@@ -478,6 +479,14 @@
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   const stripe = Stripe(STRIPE_PUBLISHABLE_KEY);
+
+  // Floor for a *paid* tip. Deliberately not applied to the $0 "No Tip"
+  // path, which never creates a PaymentIntent at all — a free request is a
+  // real feature, not a tip of zero. At 10% plus Stripe's 2.9% + 30¢ a $1 tip
+  // nets the performer about $0.57, so anything under $3 serves nobody.
+  // Mirrored server-side by MIN_TIP in api/create-payment-intent.js; the
+  // client check is a convenience, that one is the control.
+  const MIN_CUSTOM_TIP = 3;
 
   // --- State ------------------------------------------------------------
   let songs = [];
@@ -1154,7 +1163,7 @@
       customTipWrap.classList.remove('hidden');
       customTipInput.focus();
       const val = parseFloat(customTipInput.value);
-      submitBtn.disabled = !(val > 0);
+      submitBtn.disabled = !(val >= MIN_CUSTOM_TIP);
       teardownPaymentElement(); // wait for them to (re)type a custom amount
     } else {
       selectedTip = parseFloat(btn.dataset.amount);
@@ -1172,12 +1181,12 @@
 
   customTipInput.addEventListener('input', () => {
     const val = parseFloat(customTipInput.value);
-    const valid = val > 0;
+    const valid = val >= MIN_CUSTOM_TIP;
     submitBtn.disabled = !valid;
     submitBtn.textContent = valid ? `Pay $${val.toFixed(2)} & Send` : 'Send Request';
 
     if (paymentIntentDebounceTimer) clearTimeout(paymentIntentDebounceTimer);
-    if (!(val >= 0.5)) {
+    if (!valid) {
       teardownPaymentElement();
       return;
     }
@@ -1196,7 +1205,7 @@
 
   submitBtn.addEventListener('click', async () => {
     if (selectedTip === null || !gigSession) return;
-    if (selectedTip === 'custom' && !(parseFloat(customTipInput.value) > 0)) return;
+    if (selectedTip === 'custom' && !(parseFloat(customTipInput.value) >= MIN_CUSTOM_TIP)) return;
 
     // Last-second safety check: the song could have hit its cap, or gone on
     // cooldown from just being played, in the moments between opening this

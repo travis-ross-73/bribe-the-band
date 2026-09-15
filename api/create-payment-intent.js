@@ -16,7 +16,11 @@ import { createClient } from '@supabase/supabase-js';
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://ykvpjeiakvgihpxektcf.supabase.co';
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'sb_publishable_g4w52upNnalAllmn8_8vRA_G6Hj-tlM';
 
-const MIN_TIP = 0.5; // Stripe's real minimum charge
+// Floor for a paid tip. Was 0.5 (Stripe's own minimum charge); raised to the
+// product minimum because client validation is a convenience and this is the
+// control. The $0 "No Tip" path never reaches this function at all — it's a
+// direct insert, so free requests are unaffected by this number.
+const MIN_TIP = 3;
 const MAX_TIP = 500; // sanity ceiling against a fat-fingered custom amount
 
 // Statement descriptor (15-TECH-SCOPE Task 2). Stripe appends this suffix to
