@@ -21,9 +21,16 @@ const MAX_TIP = 500; // sanity ceiling against a fat-fingered custom amount
 
 // Statement descriptor (15-TECH-SCOPE Task 2). Stripe appends this suffix to
 // the platform account's *shortened* descriptor, and the combined string is
-// capped at 22 characters including the "PREFIX* " join — `BTB-TIP` (7) plus
-// the separator leaves 13 for the band.
-const DESCRIPTOR_MAX = 13;
+// capped at 22 characters including the "PREFIX* " join, so the band's share
+// is 20 minus the prefix length.
+//
+// The prefix is `BRIBEBAND` (9) -> 11 here. The scope originally specced
+// `BTB-TIP` (7 -> 13), but Stripe rejected it: a shortened descriptor must
+// resemble the business name or URL and may not be a product description,
+// which "TIP" is. `BRIBETHEBAND` was the documented fallback but exceeds the
+// 10-character ceiling on shortened descriptors. Confirmed accepted
+// 2026-09-15. If the prefix ever changes, change this number with it.
+const DESCRIPTOR_MAX = 11;
 // Below this a word-boundary cut has thrown away so much that a hard cut at
 // the limit carries more information — e.g. "A B VERYLONGWORD" should not
 // become "A B".
