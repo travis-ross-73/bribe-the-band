@@ -642,6 +642,154 @@
   .gig-report-status { color: var(--muted); font-size: 0.78rem; }
   .gig-report-stats { color: var(--accent); font-weight: 600; font-size: 0.88rem; white-space: nowrap; }
   .gig-report-songs { margin-top: 8px; border-top: 1px solid var(--divider); padding-top: 8px; }
+  /* ============ Signage tab — printable QR displays ============
+     One idea holds this together: a "page" sized in real millimetres whose
+     base font-size is derived from its own dimensions. Everything inside is
+     sized in `em`, so one piece of markup lays out correctly at A6 and at
+     Tabloid without a second template. Screen preview transform: scale()s
+     that page down to fit the column; printing sets the scale back to 1 and
+     the millimetres are already correct.
+
+     Template identity lives in CSS (.sg-tpl-* below), not in the markup, so
+     portrait pieces and the landscape table-tent panels share one slot
+     structure and still look like the same five designs. */
+  .sg-step-note { color: var(--muted); font-size: 0.82rem; margin: 6px 0 0; line-height: 1.5; }
+  .sg-link-confirm {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 6px; padding: 12px 14px; margin-bottom: 12px;
+  }
+  .sg-link-url { font-weight: 700; color: var(--accent); font-size: 1rem; word-break: break-all; text-decoration: none; }
+  .sg-link-url:hover { color: var(--text); text-decoration: underline; }
+  .sg-locked { opacity: 0.32; pointer-events: none; }
+
+  .sg-field-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 0 14px; }
+  .sg-label { display: block; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin-bottom: 5px; }
+  .sg-count { float: right; text-transform: none; letter-spacing: 0; opacity: 0.8; }
+  .sg-count.over { color: var(--danger); opacity: 1; }
+
+  .sg-choice-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; align-items: center; }
+  .sg-chip {
+    background: transparent; border: 1px solid rgba(244,228,200,0.25); color: var(--text);
+    border-radius: 6px; padding: 7px 12px; font-size: 0.82rem; cursor: pointer; font-family: inherit;
+  }
+  .sg-chip:hover { border-color: rgba(244,228,200,0.5); }
+  .sg-chip.active { border-color: var(--accent); color: var(--accent); background: rgba(212,160,23,0.08); }
+  .sg-chip-sub { display: block; font-size: 0.68rem; color: var(--muted); margin-top: 2px; }
+  .sg-chip.active .sg-chip-sub { color: rgba(212,160,23,0.75); }
+  .sg-swatch { display: inline-block; width: 11px; height: 11px; border-radius: 50%; margin-right: 7px; vertical-align: -1px; border: 1px solid rgba(0,0,0,0.4); }
+  .sg-group-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); width: 100%; margin: 6px 0 -4px; }
+
+  .sg-stage {
+    background: repeating-conic-gradient(#221E1A 0% 25%, #2A2622 0% 50%) 50% / 18px 18px;
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 18px; display: flex; justify-content: center; overflow: hidden;
+  }
+  .sg-scaler { transform-origin: top left; }
+  .sg-note {
+    border-left: 3px solid var(--accent); background: rgba(212,160,23,0.07);
+    padding: 9px 12px; font-size: 0.8rem; color: var(--text); line-height: 1.5;
+    border-radius: 0 5px 5px 0; margin-top: 12px;
+  }
+  .sg-note.err { border-left-color: var(--danger); background: rgba(224,97,107,0.08); }
+  .sg-note.calm { border-left-color: rgba(244,228,200,0.3); background: rgba(244,228,200,0.04); color: var(--muted); }
+  .sg-controls { display: flex; gap: 18px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 14px; }
+  .sg-slider { flex: 1 1 210px; min-width: 190px; }
+  .sg-slider label { display: flex; justify-content: space-between; align-items: baseline; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin-bottom: 4px; }
+  .sg-slider .sg-val { text-transform: none; letter-spacing: 0; color: var(--accent); font-weight: 600; }
+  .sg-slider input[type="range"] { width: 100%; margin: 0; padding: 0; border: none; background: transparent; accent-color: var(--accent); height: 20px; }
+  .sg-export-status { font-size: 0.8rem; color: var(--muted); min-height: 1.1em; margin-top: 8px; }
+  .sg-export-status.ok { color: var(--success); }
+  .sg-export-status.err { color: var(--danger); }
+
+  /* ---------- the page ---------- */
+  .sg-page {
+    --t-bg: #0E0C0A; --t-ink: #F4E4C8; --t-accent: #D4A017;
+    --t-paper: #FFFFFF; --t-qr: #111111;
+    --qr: 60mm; --pad: 10mm;
+    position: relative; overflow: hidden; box-sizing: border-box;
+    background: var(--t-bg); color: var(--t-ink);
+    font-family: 'Inter', sans-serif;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  .sg-page * { box-sizing: border-box; }
+  .sg-decor { position: absolute; inset: 0; pointer-events: none; }
+  .sg-body {
+    position: absolute; inset: var(--pad);
+    display: flex; flex-direction: column; align-items: center; justify-content: space-between;
+    text-align: center;
+  }
+  .sg-top, .sg-bot { width: 100%; flex: 0 0 auto; }
+  .sg-mid {
+    width: 100%; flex: 1 1 auto; min-height: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1em;
+  }
+  .sg-land .sg-body { flex-direction: row; align-items: center; justify-content: center; gap: 1.4em; text-align: left; }
+  .sg-land .sg-copy { display: flex; flex-direction: column; justify-content: center; gap: 0.35em; flex: 1 1 auto; min-width: 0; height: 100%; }
+  .sg-land .sg-mid { flex: 0 0 auto; align-items: flex-start; }
+
+  /* Auto-fitting slots: the box is fixed, the type shrinks to fit it. */
+  .sg-fit { overflow: hidden; display: flex; align-items: center; justify-content: center; width: 100%; line-height: 1.05; }
+  .sg-land .sg-fit { justify-content: flex-start; }
+  .sg-fit > span { display: block; white-space: nowrap; }
+  .sg-fit.sg-wrap > span { white-space: normal; }
+
+  .sg-band { height: 1.5em; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; color: var(--t-accent); font-size: 1.15em; }
+  .sg-headline { height: 2.45em; font-family: var(--f-display, 'Bodoni Moda', serif); font-weight: 700; font-size: 3.6em; }
+  .sg-sub { height: 1.45em; font-weight: 600; font-size: 1.35em; }
+  .sg-url { height: 1.45em; font-weight: 700; letter-spacing: 0.02em; font-size: 1em; opacity: 0.9; }
+  .sg-land .sg-headline { font-size: 2.8em; }
+
+
+  /* The QR is always dark-on-light with its own quiet zone, whatever the
+     theme is doing. A themed or inverted code is the fastest way to end up
+     with something that scans on a desk and fails in a dark room. */
+  .sg-qr-card { background: var(--t-paper); border-radius: 0.25em; padding: 0.3em; flex: 0 0 auto; width: var(--qr); height: var(--qr); }
+  .sg-qr-card img { display: block; width: 100%; height: 100%; }
+
+  /* ---------- templates ---------- */
+  .sg-tpl-marquee .sg-headline { text-transform: none; }
+  .sg-rules { width: 100%; flex: 0 0 auto; margin: 0.1em 0 0.5em; }
+  .sg-rules i, .sg-rules b { display: block; background: var(--t-accent); width: 100%; }
+  .sg-rules i { height: 0.13em; margin-bottom: 0.16em; }
+  .sg-rules b { height: 0.05em; }
+  .sg-land .sg-rules { margin: 0.05em 0 0.35em; }
+
+  .sg-tpl-ticket .sg-headline { font-family: var(--f-display, 'Inter', sans-serif); font-weight: 800; text-transform: uppercase; letter-spacing: -0.015em; font-size: 3em; }
+  .sg-tpl-ticket .sg-tk-bar { position: absolute; top: 0.75em; left: 0.75em; right: 0.75em; height: 0.9em; background: var(--t-accent); }
+  .sg-tpl-ticket .sg-tk-frame { position: absolute; inset: 0.75em; border: 0.11em dashed var(--t-accent); }
+
+  .sg-tpl-minimal .sg-headline { font-family: var(--f-display, 'Inter', sans-serif); font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; font-size: 1.9em; height: 2.6em; }
+  .sg-tpl-minimal.sg-land .sg-headline { font-size: 1.7em; }
+  .sg-tpl-minimal .sg-band { font-size: 0.95em; letter-spacing: 0.3em; }
+  .sg-tpl-minimal .sg-sub { font-weight: 400; opacity: 0.75; }
+
+  .sg-tpl-setlist .sg-headline { font-family: var(--f-display, 'Inter', sans-serif); font-weight: 800; text-transform: uppercase; font-size: 3.1em; letter-spacing: -0.01em; }
+  .sg-tpl-setlist .sg-lines { position: absolute; inset: 1.4em; background: repeating-linear-gradient(to bottom, transparent 0 1.5em, var(--t-ink-soft) 1.5em 1.57em); }
+  .sg-tpl-setlist .sg-band { letter-spacing: 0.3em; }
+
+  .sg-tpl-tipjar .sg-headline { color: var(--t-accent); font-size: 3.4em; }
+  .sg-tpl-tipjar .sg-tj-frame { position: absolute; inset: 0.7em; border: 0.45em solid var(--t-accent); }
+  .sg-tpl-tipjar .sg-sub { height: 2.5em; }
+  .sg-tpl-tipjar .sg-sub > span { background: var(--t-accent); color: var(--t-bg); padding: 0.3em 1.1em; border-radius: 2em; }
+
+  /* ---------- table tent sheet ---------- */
+  .sg-sheet { position: relative; overflow: hidden; background: #FFFFFF; box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .sg-sheet .sg-tent-slot { position: absolute; left: 0; right: 0; }
+  .sg-sheet .sg-tent-slot.flip { transform: rotate(180deg); }
+  .sg-fold { position: absolute; left: 0; right: 0; height: 0; border-top: 1px dashed #9a9a9a; }
+  .sg-fold span { position: absolute; right: 4mm; transform: translateY(-50%); color: #9a9a9a; font: 600 7pt 'Inter', sans-serif; letter-spacing: 0.14em; padding: 0 4px; }
+  .sg-flap-note { position: absolute; left: 0; right: 0; text-align: center; color: #b4b4b4; font: 600 8pt 'Inter', sans-serif; letter-spacing: 0.1em; }
+
+  @media screen and (max-width: 560px) { .sg-stage { padding: 10px; } }
+
+  /* ---------- print: the piece at 1:1, nothing else ---------- */
+  #sg-print-root { position: fixed; left: -20000px; top: 0; width: 0; height: 0; }
+  @media print {
+    body.sg-printing { background: #fff !important; }
+    body.sg-printing > *:not(#sg-print-root) { display: none !important; }
+    body.sg-printing #sg-print-root { position: static; width: auto; height: auto; }
+  }
 </style>
 </head>
 <body>
@@ -698,6 +846,7 @@
       <button class="tab-btn" data-tab="setlists">Setlists</button>
       <button class="tab-btn" data-tab="library">Song Library</button>
       <button class="tab-btn" data-tab="reporting">Reporting</button>
+      <button class="tab-btn" data-tab="signage">Signage</button>
       <button class="tab-btn" data-tab="settings">Settings</button>
     </div>
 
@@ -917,6 +1066,95 @@
       <div id="followed-gigs-summary" class="report-summary-grid"></div>
       <div id="followed-gigs-list"></div>
     </section>
+
+    </div>
+
+    <div class="tab-panel" data-tab-panel="signage">
+
+    <section>
+      <h2>1. Confirm Your Link<span class="info-wrap"><button type="button" class="info-icon" aria-label="More info">i</button><div class="info-popover hidden">Everything printed here points at your permanent crowd page — the same address every night, so a poster you print tonight still works next year. Open it once and make sure it looks right before you commit it to paper.</div></span></h2>
+      <div class="section-sub">This is the address the QR code will send people to.</div>
+      <div class="sg-link-confirm">
+        <a id="sg-link-url" class="sg-link-url" href="#" target="_blank" rel="noopener">—</a>
+        <button class="tiny" id="sg-open-link-btn">Open It</button>
+      </div>
+      <div id="sg-origin-warn"></div>
+      <label style="display:flex;align-items:flex-start;gap:9px;font-size:0.88rem;line-height:1.45;cursor:pointer;">
+        <input type="checkbox" id="sg-confirm-link" style="margin-top:3px;" />
+        <span>I opened that link and it's my page. Build my QR code.</span>
+      </label>
+      <p class="sg-step-note" id="sg-confirm-note">Nothing below unlocks until you've checked it — a poster with a typo'd QR is an expensive lesson.</p>
+    </section>
+
+    <div id="sg-builder" class="sg-locked">
+
+    <section>
+      <h2>2. Pick a Design</h2>
+      <div class="section-sub">Five layouts, same information. All of them lead with the ask, not your name — this is a piece for people who are holding a phone, not people reading a bio.</div>
+      <div class="sg-choice-row" id="sg-template-row"></div>
+
+      <div class="sg-label" style="margin-top:6px;">Headline type</div>
+      <div class="sg-choice-row" id="sg-font-row"></div>
+
+      <div class="sg-label" style="margin-top:6px;">Color</div>
+      <div class="sg-choice-row" id="sg-theme-row"></div>
+      <div id="sg-ink-warn"></div>
+    </section>
+
+    <section>
+      <h2>3. Your Words<span class="info-wrap"><button type="button" class="info-icon" aria-label="More info">i</button><div class="info-popover hidden">Type sizes adjust themselves to whatever you write — a long band name simply sets smaller. There's a floor, though: if a line gets too long to stay readable across a room, you'll see a warning under the preview.</div></span></h2>
+      <div class="section-sub">Leave a field blank to drop that line from the design entirely.</div>
+      <div class="sg-field-grid">
+        <div>
+          <label class="sg-label" for="sg-headline">The ask <span class="sg-count" id="sg-headline-count"></span></label>
+          <input type="text" id="sg-headline" maxlength="40" placeholder="SEE OUR ENTIRE SONG LIST!" />
+        </div>
+        <div>
+          <label class="sg-label" for="sg-band">Band/Performer Name <span class="sg-count" id="sg-band-count"></span></label>
+          <input type="text" id="sg-band" maxlength="34" placeholder="Ten Cent Prophet" />
+        </div>
+      </div>
+      <label class="sg-label" for="sg-sub">How it works <span class="sg-count" id="sg-sub-count"></span></label>
+      <input type="text" id="sg-sub" maxlength="52" placeholder="SCAN THE CODE &middot; PICK A SONG &middot; TIP THE BAND" />
+      <label style="display:flex;align-items:center;gap:9px;font-size:0.85rem;cursor:pointer;margin-top:4px;">
+        <input type="checkbox" id="sg-show-url" checked />
+        <span>Print the web address under the code (for anyone whose camera won't cooperate)</span>
+      </label>
+    </section>
+
+    <section>
+      <h2>4. Size<span class="info-wrap"><button type="button" class="info-icon" aria-label="More info">i</button><div class="info-popover hidden">US and EU paper sizes both print at true dimensions. Table tents come out as one flat sheet with fold lines — fold it into a triangle and tape the base, and it reads from both sides of the table.</div></span></h2>
+      <div class="sg-choice-row" id="sg-size-row"></div>
+    </section>
+
+    <section>
+      <div class="section-header-row"><h2>5. Preview &amp; Print</h2><span class="section-sub" id="sg-size-readout" style="margin:0;"></span></div>
+      <div class="sg-controls">
+        <div class="sg-slider">
+          <label for="sg-qr-scale">QR code size <span class="sg-val" id="sg-qr-val"></span></label>
+          <input type="range" id="sg-qr-scale" min="70" max="165" step="5" value="100" />
+        </div>
+        <div class="sg-slider">
+          <label for="sg-text-scale">Text size <span class="sg-val" id="sg-text-val"></span></label>
+          <input type="range" id="sg-text-scale" min="75" max="130" step="5" value="100" />
+        </div>
+        <button class="tiny" id="sg-reset-scale">Reset</button>
+      </div>
+      <div class="sg-stage"><div class="sg-scaler" id="sg-scaler"></div></div>
+      <div id="sg-scan-warn"></div>
+      <div class="button-row" style="margin-top:14px;">
+        <button class="primary" id="sg-pdf-btn">Download PDF</button>
+        <button class="secondary" id="sg-print-btn">Print Now</button>
+      </div>
+      <div class="button-row">
+        <button class="secondary" id="sg-png-btn">QR only &mdash; PNG (transparent)</button>
+        <button class="secondary" id="sg-jpg-btn">QR only &mdash; JPG</button>
+      </div>
+      <div class="sg-export-status" id="sg-export-status"></div>
+      <p class="sg-step-note">The PDF is the one to hand a print shop — it carries the exact page size, so nothing gets "fit to page" and shrunk. Printing straight from here works too; set margins to None and turn on background graphics, or the color drops out.</p>
+    </section>
+
+    </div>
 
     </div>
 
@@ -1382,6 +1620,7 @@
       reportingLoaded = true;
       loadReportingData();
     }
+    if (activeTabBtn && activeTabBtn.dataset.tab === 'signage') sgInit();
 
     // Landing back here from Stripe's hosted onboarding (see
     // create-connect-account-link.js's return_url/refresh_url) — re-check
@@ -1540,6 +1779,7 @@
     const url = `${window.location.origin}/${performer.handle}`;
     crowdLinkUrlEl.textContent = url;
     crowdLinkUrlEl.href = url;
+    sgSyncPerformer();
   }
 
   copyCrowdLinkBtn.addEventListener('click', async () => {
@@ -3270,6 +3510,777 @@
     }).join('');
   }
 
+  // ---------------- Signage: printable QR displays ----------------
+  // Turns the performer's permanent crowd-page URL into printable pieces —
+  // posters, postcards, table tents — whose whole job is "scan this, request
+  // a song, tip the band." Design decisions that aren't arbitrary:
+  //   * The QR stays dark-on-light with its own quiet zone no matter which
+  //     theme is picked. A themed or inverted code scans fine on a desk and
+  //     then fails in a dark room, which is exactly where these get used.
+  //   * Every piece leads with the ask, not the band name — the audience is
+  //     holding a phone, not reading a bio.
+  //   * The QR's size drives the layout (it sets how far away the piece is
+  //     readable), so it's a fixed proportion of the page and everything
+  //     else flows around it.
+  // Nothing here writes to the database; it's all client-side rendering off
+  // `performer.handle`.
+
+  const SG_TPL_STORAGE_KEY = 'btb-signage-prefs';
+  const SG_LIVE_HOSTS = ['bribetheband.live', 'www.bribetheband.live'];
+
+  const SG_SIZES = [
+    { id: 'letter',   group: 'US',      label: 'Letter',       sub: '8.5 × 11 in',   w: 215.9, h: 279.4 },
+    { id: 'half',     group: 'US',      label: 'Half sheet',   sub: '5.5 × 8.5 in',  w: 139.7, h: 215.9 },
+    { id: 'quarter',  group: 'US',      label: 'Quarter sheet',sub: '4.25 × 5.5 in', w: 107.95, h: 139.7 },
+    { id: 'postcard', group: 'US',      label: 'Postcard',     sub: '4 × 6 in',      w: 101.6, h: 152.4 },
+    { id: 'tabloid',  group: 'US',      label: 'Tabloid',      sub: '11 × 17 in',    w: 279.4, h: 431.8 },
+    { id: 'a3',       group: 'EU',      label: 'A3',           sub: '297 × 420 mm',  w: 297,   h: 420 },
+    { id: 'a4',       group: 'EU',      label: 'A4',           sub: '210 × 297 mm',  w: 210,   h: 297 },
+    { id: 'a5',       group: 'EU',      label: 'A5',           sub: '148 × 210 mm',  w: 148,   h: 210 },
+    { id: 'a6',       group: 'EU',      label: 'A6',           sub: '105 × 148 mm',  w: 105,   h: 148 },
+    // Tents print as one flat sheet: two mirrored panels plus a base flap.
+    // Fold on the dashed lines, tape the flap, and it reads from both sides
+    // of the table.
+    { id: 'tent-us',  group: 'Table tents', label: 'Table tent', sub: 'folds from Letter', w: 215.9, h: 279.4, panelH: 101.6 },
+    { id: 'tent-a4',  group: 'Table tents', label: 'Table tent', sub: 'folds from A4',     w: 210,   h: 297,   panelH: 105 }
+  ];
+
+  // rgba spelled out rather than color-mix(): the PDF rasterizer doesn't
+  // understand color-mix and silently drops those fills.
+  const SG_THEMES = [
+    { id: 'bone',     label: 'Bone',          dot: '#F4EDE0',
+      vars: { '--t-bg':'#F4EDE0','--t-ink':'#1A1714','--t-accent':'#8B2E1F','--t-paper':'#FFFFFF',
+              '--t-ink-soft':'rgba(26,23,20,0.16)','--t-ink-soft2':'rgba(26,23,20,0.20)','--t-bg-soft':'rgba(244,237,224,0.86)' } },
+    { id: 'press',    label: 'Press',         dot: '#FFFFFF',
+      vars: { '--t-bg':'#FFFFFF','--t-ink':'#000000','--t-accent':'#000000','--t-paper':'#FFFFFF',
+              '--t-ink-soft':'rgba(0,0,0,0.14)','--t-ink-soft2':'rgba(0,0,0,0.18)','--t-bg-soft':'rgba(255,255,255,0.88)' } },
+    { id: 'stage',    label: 'Stage',         dot: '#0E0C0A',
+      vars: { '--t-bg':'#0E0C0A','--t-ink':'#F4E4C8','--t-accent':'#D4A017','--t-paper':'#FFFFFF',
+              '--t-ink-soft':'rgba(244,228,200,0.16)','--t-ink-soft2':'rgba(244,228,200,0.22)','--t-bg-soft':'rgba(14,12,10,0.86)' } },
+    { id: 'neon',     label: 'Neon',          dot: '#46E0C8',
+      vars: { '--t-bg':'#140E2B','--t-ink':'#EAF2FF','--t-accent':'#46E0C8','--t-paper':'#FFFFFF',
+              '--t-ink-soft':'rgba(234,242,255,0.16)','--t-ink-soft2':'rgba(234,242,255,0.22)','--t-bg-soft':'rgba(20,14,43,0.86)' } },
+    { id: 'kraft',    label: 'Kraft',         dot: '#C8A87E',
+      vars: { '--t-bg':'#C8A87E','--t-ink':'#2A2118','--t-accent':'#7A3B1F','--t-paper':'#FFFFFF',
+              '--t-ink-soft':'rgba(42,33,24,0.18)','--t-ink-soft2':'rgba(42,33,24,0.24)','--t-bg-soft':'rgba(200,168,126,0.86)' } }
+  ];
+  const SG_DARK_THEMES = ['stage', 'neon', 'kraft'];
+
+  const SG_TEMPLATES = [
+    { id: 'marquee', qr: 16, label: 'Marquee', sub: 'Serif, theatrical', pad: 2.0,
+      decor: '', afterBand: '<div class="sg-rules"><i></i><b></b></div>' },
+    { id: 'ticket', qr: 15,  label: 'Ticket',  sub: 'Stub with a dashed edge', pad: 2.5,
+      decor: '<div class="sg-tk-bar"></div><div class="sg-tk-frame"></div>' },
+    { id: 'minimal', qr: 20, label: 'Minimal', sub: 'Big code, few words', pad: 2.0,
+      decor: '' },
+    { id: 'setlist', qr: 16, label: 'Set List', sub: 'Ruled, like a taped-up set list', pad: 2.6,
+      decor: '<div class="sg-lines"></div>' },
+    { id: 'tipjar', qr: 15,  label: 'Tip Jar', sub: 'Leads with the tip', pad: 2.6,
+      decor: '<div class="sg-tj-frame"></div>' }
+  ];
+
+  // Headline faces. Each template still declares its own family as the CSS
+  // fallback, so "House" sets no override at all and every template keeps
+  // the voice it was drawn with. The rest — band name, instructions, URL —
+  // stays Inter regardless: those are the lines that have to survive being
+  // read across a room.
+  const SG_FONTS = [
+    { id: 'house',     label: 'House',     sub: 'Per template' },
+    { id: 'condensed', label: 'Condensed', sub: 'Oswald',            google: 'Oswald:wght@500;700',        stack: "'Oswald', 'Inter', sans-serif",           family: 'Oswald',          weight: 700 },
+    { id: 'slab',      label: 'Slab',      sub: 'Alfa Slab One',     google: 'Alfa+Slab+One',              stack: "'Alfa Slab One', Georgia, serif",         family: 'Alfa Slab One',   weight: 400 },
+    { id: 'marker',    label: 'Marker',    sub: 'Permanent Marker',  google: 'Permanent+Marker',           stack: "'Permanent Marker', 'Inter', sans-serif", family: 'Permanent Marker', weight: 400 },
+    { id: 'grotesk',   label: 'Grotesk',   sub: 'Space Grotesk',     google: 'Space+Grotesk:wght@500;700', stack: "'Space Grotesk', 'Inter', sans-serif",    family: 'Space Grotesk',   weight: 700 }
+  ];
+
+  const SG_DEFAULTS = { headline: 'SEE OUR ENTIRE SONG LIST!', sub: 'SCAN THE CODE · PICK A SONG · TIP THE BAND' };
+
+  let sgState = {
+    template: 'marquee', theme: 'bone', size: 'letter', font: 'house',
+    qrScale: 100, textScale: 100,
+    headline: '', band: '', sub: '', showUrl: true
+  };
+  const SG_LAND_QR = 14.5;   // tent panels are laid out against a 22-unit height
+  let sgInited = false, sgQrLibPromise = null, sgQrDataUrl = null, sgQrForUrl = null;
+
+  const sgEl = {};
+  ['sg-link-url','sg-open-link-btn','sg-confirm-link','sg-confirm-note','sg-builder','sg-origin-warn',
+   'sg-template-row','sg-theme-row','sg-size-row','sg-ink-warn','sg-headline','sg-band','sg-sub',
+   'sg-show-url','sg-scaler','sg-scan-warn','sg-size-readout','sg-export-status',
+   'sg-font-row','sg-qr-scale','sg-text-scale','sg-qr-val','sg-text-val','sg-reset-scale',
+   'sg-pdf-btn','sg-print-btn','sg-png-btn','sg-jpg-btn'
+  ].forEach(id => { sgEl[id] = document.getElementById(id); });
+
+  function sgCrowdUrl() {
+    return performer ? `${window.location.origin}/${performer.handle}` : '';
+  }
+  function sgSize() { return SG_SIZES.find(s => s.id === sgState.size) || SG_SIZES[0]; }
+  function sgTheme() { return SG_THEMES.find(t => t.id === sgState.theme) || SG_THEMES[0]; }
+  function sgTpl() { return SG_TEMPLATES.find(t => t.id === sgState.template) || SG_TEMPLATES[0]; }
+  function sgFont() { return SG_FONTS.find(f => f.id === sgState.font) || SG_FONTS[0]; }
+
+  const sgFontLoads = new Map();
+  function sgEnsureFont(font) {
+    if (!font.google) return Promise.resolve();
+    if (!sgFontLoads.has(font.id)) {
+      sgFontLoads.set(font.id, new Promise(resolve => {
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = `https://fonts.googleapis.com/css2?family=${font.google}&display=swap`;
+        // Resolve either way: a face that fails to load falls back through
+        // the stack rather than leaving the preview blank.
+        link.onload = link.onerror = () => resolve();
+        document.head.appendChild(link);
+      }));
+    }
+    return sgFontLoads.get(font.id);
+  }
+
+  // `document.fonts.ready` is not enough on its own: right after a Google
+  // Fonts stylesheet loads it resolves immediately, while the face itself is
+  // still unavailable — so text measures against the fallback, the fitter
+  // decides it fits, and then the real font swaps in wider and gets clipped
+  // by the slot's overflow:hidden. Silently. Load the specific faces first,
+  // then wait.
+  async function sgFontsSettled() {
+    const font = sgFont();
+    const specs = ["700 40px 'Inter'", "800 40px 'Inter'", "700 40px 'Bodoni Moda'"];
+    if (font.family) specs.push(`${font.weight || 700} 40px '${font.family}'`);
+    try {
+      await Promise.all(specs.map(spec => document.fonts.load(spec).catch(() => {})));
+      await document.fonts.ready;
+    } catch (e) { /* older browsers: fit against whatever's loaded */ }
+  }
+
+  // Loaded on first use rather than at page load — the console is opened
+  // mid-gig on a phone more often than it's used to make posters.
+  function sgLoadQrLib() {
+    if (!sgQrLibPromise) {
+      sgQrLibPromise = import('https://esm.sh/qrcode@1.5.4')
+        .then(m => m.default || m)
+        .catch(() => {
+          sgQrLibPromise = null;
+          throw new Error('Could not load the QR code library — check your connection and try again.');
+        });
+    }
+    return sgQrLibPromise;
+  }
+
+  // Error correction 'M', not 'H': higher correction packs in more (and
+  // therefore smaller) modules, which costs more scan distance than the
+  // redundancy buys back on a clean printed sheet with no logo over it.
+  async function sgQrPng(url, { transparent = false, size = 1400 } = {}) {
+    const QR = await sgLoadQrLib();
+    return QR.toDataURL(url, {
+      errorCorrectionLevel: 'M',
+      margin: 4,
+      width: size,
+      color: { dark: '#111111FF', light: transparent ? '#00000000' : '#FFFFFFFF' }
+    });
+  }
+
+  async function sgEnsureQr() {
+    const url = sgCrowdUrl();
+    if (sgQrDataUrl && sgQrForUrl === url) return sgQrDataUrl;
+    sgQrDataUrl = await sgQrPng(url, { transparent: false, size: 1400 });
+    sgQrForUrl = url;
+    return sgQrDataUrl;
+  }
+
+  // ---- building a single printed face ----
+  function sgPageEl(wMm, hMm, landscape) {
+    const page = document.createElement('div');
+    page.className = `sg-page sg-tpl-${sgState.template}` + (landscape ? ' sg-land' : '');
+    page.style.width = wMm + 'mm';
+    page.style.height = hMm + 'mm';
+    // The one knob: base type size as a fraction of the page. Portrait
+    // designs are laid out against a 34em-wide grid, the landscape tent
+    // panels against a 22em-tall one.
+    // One grid unit. Portrait pieces are drawn against a 34-unit width, the
+    // landscape tent panels against a 22-unit height.
+    const unitMm = landscape ? hMm / 22 : wMm / 34;
+    const tpl0 = sgTpl();
+
+    // Type and QR scale independently on purpose: the code's size decides
+    // how far away the piece works, so nudging the headline up shouldn't
+    // quietly cost you scan distance.
+    page.style.fontSize = (unitMm * (sgState.textScale / 100)) + 'mm';
+    page.style.setProperty('--qr',
+      ((landscape ? SG_LAND_QR : (tpl0.qr || 15)) * unitMm * (sgState.qrScale / 100)).toFixed(2) + 'mm');
+
+    // Proportional margin, but never inside the ~5 mm a home printer can't
+    // reach — and wider on a tent panel, so nothing sits on the fold.
+    page.style.setProperty('--pad',
+      Math.max((tpl0.pad || 2) * unitMm, landscape ? 12 : 9).toFixed(2) + 'mm');
+
+    const font = sgFont();
+    if (font.stack) page.style.setProperty('--f-display', font.stack);
+
+    const theme = sgTheme();
+    Object.entries(theme.vars).forEach(([k, v]) => page.style.setProperty(k, v));
+
+    const tpl = SG_TEMPLATES.find(t => t.id === sgState.template) || SG_TEMPLATES[0];
+    const band = sgState.band.trim();
+    const headline = sgState.headline.trim();
+    const sub = sgState.sub.trim();
+    const showUrl = sgState.showUrl;
+    const urlText = sgCrowdUrl().replace(/^https?:\/\//, '');
+
+    const slot = (cls, text, wrap) => text
+      ? `<div class="sg-fit ${cls}${wrap ? ' sg-wrap' : ''}"><span>${escapeHtml(text)}</span></div>`
+      : '';
+
+    const qr = `<div class="sg-qr-card"><img alt="" src="${sgQrDataUrl || ''}" /></div>`;
+    const top = `<div class="sg-top">${slot('sg-band', band)}${band && tpl.afterBand ? tpl.afterBand : ''}</div>`;
+    const mid = `<div class="sg-mid">${slot('sg-headline', headline, true)}${landscape ? '' : qr}</div>`;
+    const bot = `<div class="sg-bot">${slot('sg-sub', sub)}${showUrl ? slot('sg-url', urlText) : ''}</div>`;
+
+    page.innerHTML =
+      `<div class="sg-decor">${tpl.decor}</div>` +
+      `<div class="sg-body">` +
+        (landscape ? `${qr}<div class="sg-copy">${top}${mid}${bot}</div>` : `${top}${mid}${bot}`) +
+      `</div>`;
+    return page;
+  }
+
+  // ---- building the whole printed sheet (tents get folds + a base flap) ----
+  function sgBuildArtboard() {
+    const size = sgSize();
+    if (!size.panelH) return sgPageEl(size.w, size.h, false);
+
+    const sheet = document.createElement('div');
+    sheet.className = 'sg-sheet';
+    sheet.style.width = size.w + 'mm';
+    sheet.style.height = size.h + 'mm';
+    const ph = size.panelH;
+
+    [0, ph].forEach((top, i) => {
+      const holder = document.createElement('div');
+      holder.className = 'sg-tent-slot' + (i === 0 ? ' flip' : '');
+      holder.style.top = top + 'mm';
+      holder.style.height = ph + 'mm';
+      holder.appendChild(sgPageEl(size.w, ph, true));
+      sheet.appendChild(holder);
+    });
+
+    [ph, ph * 2].forEach(y => {
+      const fold = document.createElement('div');
+      fold.className = 'sg-fold';
+      fold.style.top = y + 'mm';
+      fold.innerHTML = '<span>FOLD</span>';
+      sheet.appendChild(fold);
+    });
+
+    const flap = document.createElement('div');
+    flap.className = 'sg-flap-note';
+    flap.style.top = (ph * 2 + (size.h - ph * 2) / 2) + 'mm';
+    flap.textContent = 'FOLD INTO A TRIANGLE · TAPE THIS FLAP UNDER THE FRONT PANEL';
+    sheet.appendChild(flap);
+    return sheet;
+  }
+
+  // Shrink each fixed text slot's type until the words fit inside it. Runs
+  // after fonts are ready — measuring against a fallback face produces
+  // sizes that are wrong once the real one lands.
+  function sgFitText(root) {
+    root.querySelectorAll('.sg-fit').forEach(box => {
+      const span = box.firstElementChild;
+      if (!span) return;
+      span.style.fontSize = '';
+      const base = parseFloat(getComputedStyle(box).fontSize);
+      let ratio = 1, guard = 0;
+      while (guard++ < 90 && ratio > 0.28 &&
+             (span.scrollWidth > box.clientWidth + 0.5 || span.scrollHeight > box.clientHeight + 0.5)) {
+        ratio *= 0.96;
+        span.style.fontSize = (base * ratio) + 'px';
+      }
+      box.dataset.sgRatio = ratio.toFixed(3);
+    });
+  }
+
+  // The sliders are free-range, so the layout has to defend itself: if the
+  // combination overflows a page, back the code off until it fits. Returns
+  // true when it had to intervene, so the preview can say so.
+  function sgClampToFit(root) {
+    let clamped = null;
+    // A portrait piece IS the page; only a tent sheet has pages inside it.
+    const pages = [root, ...root.querySelectorAll('.sg-page')]
+      .filter(el => el.classList && el.classList.contains('sg-page'));
+
+    pages.forEach(page => {
+      const boxes = [page.querySelector('.sg-body'), ...page.querySelectorAll('.sg-mid')].filter(Boolean);
+      const over = () => boxes.some(b => b.scrollHeight > b.clientHeight + 1 || b.scrollWidth > b.clientWidth + 1);
+      if (!over()) return;
+
+      // Type yields first. Giving up QR size first is backwards for this
+      // piece: the code's size is the whole reason it works from across a
+      // room, so it's the last thing surrendered, never the first.
+      let fs = parseFloat(getComputedStyle(page).fontSize);
+      const fsFloor = fs * 0.7;
+      let guard = 0;
+      while (guard++ < 40 && over() && fs > fsFloor) {
+        fs *= 0.96;
+        page.style.fontSize = fs + 'px';
+        sgFitText(page);
+        clamped = 'text';
+      }
+
+      // Only if shrinking the words wasn't enough, and never below something
+      // still worth printing.
+      let qrMm = parseFloat(getComputedStyle(page).getPropertyValue('--qr'));
+      const qrFloor = Math.max(35, qrMm * 0.6);
+      guard = 0;
+      while (guard++ < 40 && over() && qrMm > qrFloor) {
+        qrMm *= 0.96;
+        page.style.setProperty('--qr', qrMm.toFixed(2) + 'mm');
+        sgFitText(page);
+        clamped = 'qr';
+      }
+    });
+    return clamped;
+  }
+
+  // A slot that still overflows is clipped by its own overflow:hidden, which
+  // hides the failure from every other measurement on the page. This is the
+  // only thing that catches it, so nothing ships cropped.
+  function sgClippedSlots(root) {
+    return Array.from(root.querySelectorAll('.sg-fit')).filter(box => {
+      const span = box.firstElementChild;
+      return span && span.textContent.trim() &&
+        (span.scrollHeight > box.clientHeight + 1 || span.scrollWidth > box.clientWidth + 1);
+    });
+  }
+
+  function sgQrPhysicalMm(root) {
+    const card = root.querySelector('.sg-qr-card');
+    if (!card) return 0;
+    // Layout px → mm. CSS pins 1in to 96px regardless of the real screen.
+    return card.getBoundingClientRect().width / (window.sgPreviewScale || 1) * 25.4 / 96;
+  }
+
+  let sgCurrentArtboard = null;
+
+  async function sgRender() {
+    if (!sgInited || !performer) return;
+    await Promise.all([sgEnsureQr(), sgEnsureFont(sgFont())]);
+    const size = sgSize();
+
+    const board = sgBuildArtboard();
+    sgEl['sg-scaler'].innerHTML = '';
+    sgEl['sg-scaler'].appendChild(board);
+    sgCurrentArtboard = board;
+
+    // Scale the real artboard down to whatever width the column has.
+    const stage = sgEl['sg-scaler'].parentElement;
+    const avail = stage.clientWidth - 36;
+    const boardPx = size.w * 96 / 25.4;
+    const boardHPx = size.h * 96 / 25.4;
+    // A stage that hasn't been laid out yet measures zero, which made this
+    // negative — a mirrored preview and a readout like "-102 mm". Fall back
+    // to 1:1 until there's a real width to scale against; the observer below
+    // re-renders the moment there is one.
+    const scale = avail > 40 ? Math.min(1, avail / boardPx) : 1;
+    window.sgPreviewScale = scale;
+    // transform: scale() doesn't change the element's layout size, so the
+    // negative margins pull the reserved box back to what's actually drawn —
+    // otherwise the stage reserves full print size and the piece sits off
+    // to one side of a mostly-empty box.
+    const sc = sgEl['sg-scaler'];
+    sc.style.transformOrigin = 'top left';
+    sc.style.transform = `scale(${scale})`;
+    sc.style.width = boardPx + 'px';
+    sc.style.height = boardHPx + 'px';
+    sc.style.marginRight = -(boardPx * (1 - scale)) + 'px';
+    sc.style.marginBottom = -(boardHPx * (1 - scale)) + 'px';
+
+    await sgFontsSettled();
+    sgFitText(board);
+    const clamped = sgClampToFit(board);
+
+    sgRenderReadouts(board, clamped);
+
+    // Belt and braces: if a face lands later than expected, re-measure once
+    // it has. Skipped if another render has since replaced this board.
+    document.fonts.ready.then(() => {
+      if (sgCurrentArtboard !== board) return;
+      sgFitText(board);
+      sgRenderReadouts(board, sgClampToFit(board));
+    }).catch(() => {});
+  }
+
+  function sgRenderReadouts(board, clamped) {
+    const size = sgSize();
+    const inches = (mm) => (mm / 25.4);
+    sgEl['sg-size-readout'].textContent =
+      `${size.label} · ${size.sub}` + (size.panelH ? ` · panel ${Math.round(size.panelH)} mm tall` : '');
+
+    // How far away this actually scans. The 10× rule is the conservative
+    // end — it's what holds up in a dark room with an older phone, which is
+    // the condition that matters for a bar gig.
+    const qrMm = sgQrPhysicalMm(board);
+    if (sgEl['sg-qr-val']) sgEl['sg-qr-val'].textContent = qrMm ? `${qrMm.toFixed(0)} mm` : '';
+    if (sgEl['sg-text-val']) sgEl['sg-text-val'].textContent = `${sgState.textScale}%`;
+    const metres = (qrMm * 10) / 1000;
+    const feet = metres * 3.28084;
+    let html = '';
+    if (qrMm && qrMm < 30) {
+      html = `<div class="sg-note err"><strong>That code is only ${qrMm.toFixed(0)} mm across.</strong> Under about 30 mm it gets unreliable in low light even at arm's length. Try the Minimal template, or a larger size.</div>`;
+    } else if (qrMm) {
+      html = `<div class="sg-note calm">Code is ${qrMm.toFixed(0)} mm across — comfortably scannable from roughly ${feet.toFixed(0)} ft (${metres.toFixed(1)} m) in a dim room, and further in good light.</div>`;
+    }
+
+    // Warn when the type had to shrink past the point of being readable
+    // across a room rather than silently shipping a poster nobody can read.
+    const squeezed = Array.from(board.querySelectorAll('.sg-fit'))
+      .filter(b => parseFloat(b.dataset.sgRatio || '1') < 0.62 && b.textContent.trim())
+      .map(b => b.classList.contains('sg-headline') ? 'the ask'
+              : b.classList.contains('sg-band') ? 'the band/performer name'
+              : b.classList.contains('sg-sub') ? 'the how-it-works line' : 'the web address');
+    if (squeezed.length) {
+      html += `<div class="sg-note">Had to shrink ${[...new Set(squeezed)].join(' and ')} a long way to fit. Shorter wording will read better from across the room.</div>`;
+    }
+    if (clamped === 'text') {
+      html += `<div class="sg-note">Text has been scaled back to keep everything on the page at this code size. Turn the QR down, or move up a paper size, for more room.</div>`;
+    } else if (clamped === 'qr') {
+      html += `<div class="sg-note">That's as large as the code goes here — it's been held back to fit the words alongside it. Shorter wording, smaller text, or a bigger sheet will let it grow.</div>`;
+    }
+    const clipped = sgClippedSlots(board);
+    if (clipped.length) {
+      html += `<div class="sg-note err"><strong>Something is being cut off.</strong> Shorten the longest line, or turn the text size down — don't print this as it stands.</div>`;
+    }
+    sgEl['sg-scan-warn'].innerHTML = html;
+
+    const darkTheme = SG_DARK_THEMES.includes(sgState.theme);
+    const bigSheet = ['tabloid','a3','letter','a4','tent-us','tent-a4'].includes(size.id);
+    sgEl['sg-ink-warn'].innerHTML = (darkTheme && bigSheet)
+      ? `<div class="sg-note">Heads up: a full dark background at this size drinks ink and can come out blotchy on a home printer. Bone or Press cost almost nothing to print and scan just as well — worth it if you're running off a stack.</div>`
+      : '';
+  }
+
+  // ---- exports ----
+  function sgStatus(msg, kind) {
+    sgEl['sg-export-status'].textContent = msg;
+    sgEl['sg-export-status'].className = 'sg-export-status' + (kind ? ' ' + kind : '');
+  }
+  function sgDownload(blob, filename) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  }
+  function sgFileStem() {
+    const size = sgSize();
+    return `${performer.handle}-${sgState.template}-${size.id}`;
+  }
+
+  // Rasterise the artboard at print resolution. It has to be on-screen for
+  // the rasteriser to measure it, so it goes off to the side rather than
+  // display:none (which would measure as zero).
+  async function sgRasterize(wMm, hMm, dpi) {
+    const html2canvas = (await import('https://esm.sh/html2canvas@1.4.1')).default;
+    const holder = document.createElement('div');
+    holder.style.cssText = 'position:fixed;left:-20000px;top:0;z-index:-1;opacity:1;';
+    const clone = sgCurrentArtboard.cloneNode(true);
+    clone.style.transform = 'none';
+    holder.appendChild(clone);
+    document.body.appendChild(holder);
+    // Re-measure the clone in place. By export time every face is loaded, so
+    // this is the last chance to catch a slot that was fitted against a font
+    // that hadn't arrived yet — which is exactly how a cropped headline got
+    // into a PDF once.
+    sgFitText(clone);
+    sgClampToFit(clone);
+    const wPx = wMm * 96 / 25.4, hPx = hMm * 96 / 25.4;
+    try {
+      return await html2canvas(clone, {
+        scale: dpi / 96,
+        width: wPx, height: hPx,
+        backgroundColor: '#FFFFFF',
+        logging: false, useCORS: true
+      });
+    } finally {
+      holder.remove();
+    }
+  }
+
+  async function sgExportPdf() {
+    const size = sgSize();
+    if (sgCurrentArtboard && sgClippedSlots(sgCurrentArtboard).length) {
+      sgStatus('Something on the piece is being cut off — shorten the longest line or turn the text size down, then try again.', 'err');
+      return;
+    }
+    sgEl['sg-pdf-btn'].disabled = true;
+    try {
+      // 300 DPI unless the sheet is big enough that the canvas would blow
+      // past what a browser tab will hold; 200 still prints cleanly for
+      // flat colour and a QR.
+      let dpi = 300;
+      while ((size.w * dpi / 25.4) * (size.h * dpi / 25.4) > 12e6 && dpi > 200) dpi -= 20;
+      sgStatus(`Rendering at ${dpi} DPI…`);
+      const canvas = await sgRasterize(size.w, size.h, dpi);
+      const pt = mm => mm * 72 / 25.4;
+      const pdf = await PDFDocument.create();
+      pdf.setTitle(`${performer.display_name || performer.handle} — request & tip`);
+      const page = pdf.addPage([pt(size.w), pt(size.h)]);
+      const png = await pdf.embedPng(canvas.toDataURL('image/png'));
+      page.drawImage(png, { x: 0, y: 0, width: pt(size.w), height: pt(size.h) });
+      const bytes = await pdf.save();
+      sgDownload(new Blob([bytes], { type: 'application/pdf' }), `${sgFileStem()}.pdf`);
+      sgStatus(`Saved ${sgFileStem()}.pdf — exact ${size.sub}, no scaling needed at the print shop.`, 'ok');
+    } catch (err) {
+      console.error('Signage PDF export failed', err);
+      sgStatus('Could not build the PDF. "Print Now" and choosing "Save as PDF" in the print dialog gets you the same piece.', 'err');
+    } finally {
+      sgEl['sg-pdf-btn'].disabled = false;
+    }
+  }
+
+  function sgPrint() {
+    const size = sgSize();
+    let styleTag = document.getElementById('sg-page-style');
+    if (!styleTag) {
+      styleTag = document.createElement('style');
+      styleTag.id = 'sg-page-style';
+      document.head.appendChild(styleTag);
+    }
+    styleTag.textContent = `@page { size: ${size.w}mm ${size.h}mm; margin: 0; }`;
+
+    const root = document.getElementById('sg-print-root');
+    root.innerHTML = '';
+    const clone = sgCurrentArtboard.cloneNode(true);
+    clone.style.transform = 'none';
+    root.appendChild(clone);
+    sgFitText(clone);
+    sgClampToFit(clone);
+    document.body.classList.add('sg-printing');
+    const cleanup = () => {
+      document.body.classList.remove('sg-printing');
+      root.innerHTML = '';
+      window.removeEventListener('afterprint', cleanup);
+    };
+    window.addEventListener('afterprint', cleanup);
+    window.print();
+    setTimeout(cleanup, 1500);
+  }
+
+  async function sgExportQr(kind) {
+    const btn = kind === 'png' ? sgEl['sg-png-btn'] : sgEl['sg-jpg-btn'];
+    btn.disabled = true;
+    try {
+      sgStatus('Generating…');
+      const QR = await sgLoadQrLib();
+      const dataUrl = await QR.toDataURL(sgCrowdUrl(), {
+        errorCorrectionLevel: 'M',
+        margin: 4,
+        width: 2000,
+        type: kind === 'png' ? 'image/png' : 'image/jpeg',
+        rendererOpts: { quality: 0.95 },
+        color: { dark: '#111111FF', light: kind === 'png' ? '#00000000' : '#FFFFFFFF' }
+      });
+      const blob = await (await fetch(dataUrl)).blob();
+      sgDownload(blob, `${performer.handle}-qr.${kind === 'png' ? 'png' : 'jpg'}`);
+      sgStatus(kind === 'png'
+        ? 'Saved a 2000px transparent PNG. Drop it on a light background — the clear border around the code is part of what makes it scan, so a dark backdrop will break it.'
+        : 'Saved a 2000px JPG on white.', 'ok');
+    } catch (err) {
+      console.error('QR export failed', err);
+      sgStatus('Could not generate the QR image. Check your connection and try again.', 'err');
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  // ---- chrome ----
+  function sgChip(active, label, sub, dot) {
+    return `<button type="button" class="sg-chip${active ? ' active' : ''}">` +
+      (dot ? `<span class="sg-swatch" style="background:${dot}"></span>` : '') +
+      escapeHtml(label) + (sub ? `<span class="sg-chip-sub">${escapeHtml(sub)}</span>` : '') +
+      '</button>';
+  }
+
+  function sgRenderChoosers() {
+    sgEl['sg-template-row'].innerHTML = SG_TEMPLATES
+      .map(t => sgChip(t.id === sgState.template, t.label, t.sub)).join('');
+    sgEl['sg-template-row'].querySelectorAll('.sg-chip').forEach((btn, i) => {
+      btn.addEventListener('click', () => { sgState.template = SG_TEMPLATES[i].id; sgSave(); sgRenderChoosers(); sgRender(); });
+    });
+
+    sgEl['sg-font-row'].innerHTML = SG_FONTS
+      .map(f => sgChip(f.id === sgState.font, f.label, f.sub)).join('');
+    sgEl['sg-font-row'].querySelectorAll('.sg-chip').forEach((btn, i) => {
+      btn.addEventListener('click', () => { sgState.font = SG_FONTS[i].id; sgSave(); sgRenderChoosers(); sgRender(); });
+    });
+
+    sgEl['sg-theme-row'].innerHTML = SG_THEMES
+      .map(t => sgChip(t.id === sgState.theme, t.label, '', t.dot)).join('');
+    sgEl['sg-theme-row'].querySelectorAll('.sg-chip').forEach((btn, i) => {
+      btn.addEventListener('click', () => { sgState.theme = SG_THEMES[i].id; sgSave(); sgRenderChoosers(); sgRender(); });
+    });
+
+    let lastGroup = null;
+    sgEl['sg-size-row'].innerHTML = SG_SIZES.map(s => {
+      const head = s.group !== lastGroup ? `<div class="sg-group-label">${s.group}</div>` : '';
+      lastGroup = s.group;
+      return head + sgChip(s.id === sgState.size, s.label, s.sub);
+    }).join('');
+    sgEl['sg-size-row'].querySelectorAll('.sg-chip').forEach((btn, i) => {
+      btn.addEventListener('click', () => { sgState.size = SG_SIZES[i].id; sgSave(); sgRenderChoosers(); sgRender(); });
+    });
+  }
+
+  function sgSave() {
+    try { localStorage.setItem(SG_TPL_STORAGE_KEY, JSON.stringify(sgState)); } catch (e) { /* private mode */ }
+  }
+  function sgRestore() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(SG_TPL_STORAGE_KEY) || '{}');
+      Object.keys(sgState).forEach(k => { if (saved[k] !== undefined) sgState[k] = saved[k]; });
+    } catch (e) { /* ignore */ }
+    if (!SG_TEMPLATES.some(t => t.id === sgState.template)) sgState.template = 'marquee';
+    if (!SG_THEMES.some(t => t.id === sgState.theme)) sgState.theme = 'bone';
+    if (!SG_SIZES.some(s => s.id === sgState.size)) sgState.size = 'letter';
+    if (!SG_FONTS.some(f => f.id === sgState.font)) sgState.font = 'house';
+    sgState.qrScale = Math.min(165, Math.max(70, parseInt(sgState.qrScale, 10) || 100));
+    sgState.textScale = Math.min(130, Math.max(75, parseInt(sgState.textScale, 10) || 100));
+  }
+
+  function sgSetLocked(locked) {
+    sgEl['sg-builder'].classList.toggle('sg-locked', locked);
+    sgEl['sg-confirm-note'].textContent = locked
+      ? "Nothing below unlocks until you've checked it — a poster with a typo'd QR is an expensive lesson."
+      : 'Confirmed. Anything you print from here points at that address, permanently.';
+  }
+
+  function sgSyncPerformer() {
+    if (!performer || !sgEl['sg-link-url']) return;
+    const url = sgCrowdUrl();
+    sgEl['sg-link-url'].textContent = url;
+    sgEl['sg-link-url'].href = url;
+
+    // The printed code is whatever origin this console is being served from.
+    // That's fine for the copy-link button — a wrong link is a two-second
+    // fix — but a stack of postcards pointing at a staging domain isn't
+    // fixable at all, so say so loudly before anything gets printed.
+    if (sgEl['sg-origin-warn']) {
+      sgEl['sg-origin-warn'].innerHTML = SG_LIVE_HOSTS.includes(window.location.hostname)
+        ? ''
+        : `<div class="sg-note err">You're on <strong>${escapeHtml(window.location.host)}</strong>, not bribetheband.live. Anything printed from here points at this address permanently. Open the live console at bribetheband.live before printing something you're going to hand out.</div>`;
+    }
+    if (!sgState.band) {
+      sgState.band = performer.display_name || performer.handle;
+      if (sgEl['sg-band']) sgEl['sg-band'].value = sgState.band;
+    }
+    if (sgQrForUrl !== url) { sgQrDataUrl = null; sgQrForUrl = null; }
+  }
+
+  function sgInit() {
+    if (sgInited || !performer || !sgEl['sg-scaler']) return;
+    sgInited = true;
+    sgRestore();
+    if (!sgState.headline) sgState.headline = SG_DEFAULTS.headline;
+    if (!sgState.sub) sgState.sub = SG_DEFAULTS.sub;
+    sgSyncPerformer();
+
+    sgEl['sg-headline'].value = sgState.headline;
+    sgEl['sg-band'].value = sgState.band;
+    sgEl['sg-sub'].value = sgState.sub;
+    sgEl['sg-show-url'].checked = sgState.showUrl;
+    sgEl['sg-qr-scale'].value = sgState.qrScale;
+    sgEl['sg-text-scale'].value = sgState.textScale;
+    sgSetLocked(!sgEl['sg-confirm-link'].checked);
+
+    sgRenderChoosers();
+
+    let typingTimer = null;
+    const onType = (key, el) => {
+      const counter = document.getElementById(el.id + '-count');
+      const max = parseInt(el.getAttribute('maxlength'), 10);
+      const tick = () => {
+        if (!counter) return;
+        counter.textContent = `${el.value.length}/${max}`;
+        counter.classList.toggle('over', el.value.length >= max);
+      };
+      tick();
+      el.addEventListener('input', () => {
+        sgState[key] = el.value;
+        tick();
+        clearTimeout(typingTimer);
+        typingTimer = setTimeout(() => { sgSave(); sgRender(); }, 180);
+      });
+    };
+    onType('headline', sgEl['sg-headline']);
+    onType('band', sgEl['sg-band']);
+    onType('sub', sgEl['sg-sub']);
+    sgEl['sg-show-url'].addEventListener('change', () => {
+      sgState.showUrl = sgEl['sg-show-url'].checked; sgSave(); sgRender();
+    });
+
+    // Dragging a slider fires far faster than a render completes, so renders
+    // are coalesced: one in flight, at most one queued, newest state wins.
+    let renderBusy = false, renderQueued = false;
+    const liveRender = async () => {
+      if (renderBusy) { renderQueued = true; return; }
+      renderBusy = true;
+      try { await sgRender(); } finally {
+        renderBusy = false;
+        if (renderQueued) { renderQueued = false; liveRender(); }
+      }
+    };
+    const onSlide = (key, el) => el.addEventListener('input', () => {
+      sgState[key] = parseInt(el.value, 10);
+      liveRender();
+      clearTimeout(typingTimer);
+      typingTimer = setTimeout(sgSave, 400);
+    });
+    onSlide('qrScale', sgEl['sg-qr-scale']);
+    onSlide('textScale', sgEl['sg-text-scale']);
+    sgEl['sg-reset-scale'].addEventListener('click', () => {
+      sgState.qrScale = 100; sgState.textScale = 100;
+      sgEl['sg-qr-scale'].value = 100; sgEl['sg-text-scale'].value = 100;
+      sgSave(); liveRender();
+    });
+
+    sgEl['sg-confirm-link'].addEventListener('change', () => {
+      sgSetLocked(!sgEl['sg-confirm-link'].checked);
+      if (sgEl['sg-confirm-link'].checked) sgRender();
+    });
+    sgEl['sg-open-link-btn'].addEventListener('click', () => window.open(sgCrowdUrl(), '_blank', 'noopener'));
+
+    sgEl['sg-pdf-btn'].addEventListener('click', sgExportPdf);
+    sgEl['sg-print-btn'].addEventListener('click', sgPrint);
+    sgEl['sg-png-btn'].addEventListener('click', () => sgExportQr('png'));
+    sgEl['sg-jpg-btn'].addEventListener('click', () => sgExportQr('jpg'));
+
+    let resizeTimer = null;
+    window.addEventListener('resize', () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => { if (sgCurrentArtboard) sgRender(); }, 220);
+    });
+
+    // The console can be opened straight onto this tab, or on a phone that
+    // rotates, so the stage may have no usable width at first render. Watch
+    // its width and re-render once it has one. Width only — reacting to the
+    // height this render just set would loop.
+    if (window.ResizeObserver) {
+      const stage = sgEl['sg-scaler'].parentElement;
+      let lastWidth = 0;
+      new ResizeObserver(entries => {
+        const w = entries[0].contentRect.width;
+        if (Math.abs(w - lastWidth) < 4) return;
+        lastWidth = w;
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(() => { if (sgCurrentArtboard) sgRender(); }, 120);
+      }).observe(stage);
+    }
+
+    sgRender().catch(err => {
+      console.error('Signage render failed', err);
+      sgStatus('Could not build the preview — the QR code library failed to load. Check your connection and switch tabs to retry.', 'err');
+    });
+  }
+
   // ---------------- Tab navigation ----------------
   // Groups the console's sections (Tonight's Gig/Requests, Setlists,
   // Song Library) behind a simple tab bar instead of one long scrolling
@@ -3288,6 +4299,7 @@
       reportingLoaded = true;
       loadReportingData();
     }
+    if (tab === 'signage' && performer) sgInit();
   }
 
   tabButtons.forEach(btn => {
@@ -3333,6 +4345,8 @@
     })();
   }
 </script>
+
+<div id="sg-print-root"></div>
 
 </body>
 </html>
