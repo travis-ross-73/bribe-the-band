@@ -3874,7 +3874,11 @@
     const avail = stage.clientWidth - 36;
     const boardPx = size.w * 96 / 25.4;
     const boardHPx = size.h * 96 / 25.4;
-    const scale = Math.min(1, avail / boardPx);
+    // A stage that hasn't been laid out yet measures zero, which made this
+    // negative — a mirrored preview and a readout like "-102 mm". Fall back
+    // to 1:1 until there's a real width to scale against; the observer below
+    // re-renders the moment there is one.
+    const scale = avail > 40 ? Math.min(1, avail / boardPx) : 1;
     window.sgPreviewScale = scale;
     // transform: scale() doesn't change the element's layout size, so the
     // negative margins pull the reserved box back to what's actually drawn —
@@ -4254,6 +4258,22 @@
       clearTimeout(resizeTimer);
       resizeTimer = setTimeout(() => { if (sgCurrentArtboard) sgRender(); }, 220);
     });
+
+    // The console can be opened straight onto this tab, or on a phone that
+    // rotates, so the stage may have no usable width at first render. Watch
+    // its width and re-render once it has one. Width only — reacting to the
+    // height this render just set would loop.
+    if (window.ResizeObserver) {
+      const stage = sgEl['sg-scaler'].parentElement;
+      let lastWidth = 0;
+      new ResizeObserver(entries => {
+        const w = entries[0].contentRect.width;
+        if (Math.abs(w - lastWidth) < 4) return;
+        lastWidth = w;
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(() => { if (sgCurrentArtboard) sgRender(); }, 120);
+      }).observe(stage);
+    }
 
     sgRender().catch(err => {
       console.error('Signage render failed', err);
