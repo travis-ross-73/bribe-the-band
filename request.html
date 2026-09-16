@@ -370,6 +370,18 @@
   }
   .hidden { display: none !important; }
   .note-hint { color: rgba(244,228,200,0.4); font-size: 0.75rem; margin: 0 0 12px; }
+  .demo-ribbon {
+    background: rgba(212,160,23,0.12);
+    border: 1px solid rgba(212,160,23,0.35);
+    color: rgba(244,228,200,0.85);
+    border-radius: 6px;
+    padding: 9px 12px;
+    margin: 0 0 14px;
+    font-size: 0.8rem;
+    line-height: 1.45;
+    text-align: center;
+  }
+  .demo-ribbon strong { color: var(--accent); }
   /* Point-of-purchase refund disclosure. Card-network dispute rules turn on
      whether this was shown at the moment of payment, so it must sit in the
      normal flow above the pay button — never behind a toggle, an accordion or
@@ -428,6 +440,8 @@
          social accounts to follow for announcements, once those features
          are built (see docs/04-DECISIONS-AND-OPEN-QUESTIONS.md). -->
   </div>
+
+  <div id="demo-ribbon" class="demo-ribbon hidden"><strong>This is a demo.</strong> Everything below is example data for a made-up gig — nothing is charged and no request reaches a real band.</div>
 
   <div id="queue-section">
     <h2 class="section-heading">🔥 Requested Songs In Queue</h2>
@@ -507,6 +521,20 @@
   const params = new URLSearchParams(window.location.search);
   const gigCodeOverride = params.get('gig');
 
+  // Demo mode (Task 9). /demo is the marketing site's "see it live" link and
+  // is the highest-intent link on the site; it was landing on a real but
+  // idle crowd page, so every prospect who clicked "see it live" got
+  // "Offstage — For Now" and "Nothing's been requested yet".
+  //
+  // This renders the real crowd page against seeded state instead of a live
+  // gig. Both 13-SITE-AUDIT and 15-TECH-SCOPE explicitly allow static seed
+  // data here, and a genuinely live demo gig would fight check_and_end_stale_gig,
+  // which ends any gig with no request in 12 hours — so the first visitor
+  // after a quiet night would see "Offstage" all over again.
+  //
+  // ?gig= still wins, so the demo account remains testable as a normal gig.
+  const DEMO_MODE = PERFORMER_HANDLE === 'demo' && !gigCodeOverride;
+
   const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   const stripe = Stripe(STRIPE_PUBLISHABLE_KEY);
 
@@ -563,6 +591,7 @@
   let cappedSongIds = new Set(); // song ids blocked from a brand-new request (over cap, or on cooldown)
   let queueBySong = new Map();   // song_id -> running tip total, for every song still active (pending or accepted-but-not-yet-played)
   let cooldownBySong = new Map(); // song_id -> seconds remaining until re-requestable
+  let demoCooldownSeed = new Map(); // demo mode only — original values, so the countdown can loop
   // Last Call (item 29): null/cutoff_enabled:false means the performer
   // hasn't turned this on for tonight — everything below behaves exactly
   // as it always has. A song already in queueBySong is never blocked by
@@ -591,6 +620,7 @@
   const noGigCard = document.getElementById('no-gig-card');
   const noGigSubtext = document.getElementById('no-gig-subtext');
   const queueSectionEl = document.getElementById('queue-section');
+  const demoRibbon = document.getElementById('demo-ribbon');
   const songListHeading = document.getElementById('song-list-heading');
   const songListEl = document.getElementById('song-list');
   const queueListEl = document.getElementById('queue-list');
@@ -622,6 +652,7 @@
   const mainEl = document.querySelector('main');
 
   async function init() {
+    if (DEMO_MODE) return initDemoMode();
     let performerId = null;
     let gigQuery = supabase
       .from('gig_sessions')
@@ -703,6 +734,76 @@
     statusBanner.classList.add('hidden');
     await refreshCapStatus(); // renders the song list, queue strip, and cooldown section
     capPollTimer = setInterval(refreshCapStatus, CAP_POLL_MS);
+  }
+
+  // Seeded, always-populated version of this same page. Uses the demo
+  // account's REAL song catalog (so it can be curated from the console like
+  // any other performer) with a synthetic gig, queue, Recently Played list
+  // and Last Call state layered on top. Nothing here writes to the database
+  // and no poll is started, so it cannot drift or go stale.
+  async function initDemoMode() {
+    const { data: performerData } = await supabase
+      .from('performers')
+      .select('id, display_name')
+      .eq('handle', 'demo')
+      .maybeSingle();
+    if (!performerData) {
+      statusBanner.textContent = 'Demo is unavailable right now.';
+      tipOnlyCard.classList.add('hidden');
+      return;
+    }
+    performerAccountName = performerData.display_name;
+
+    const { data: songData } = await supabase
+      .from('songs')
+      .select('id, title, artist, song_key, key_with_capo, chart_url')
+      .eq('performer_id', performerData.id)
+      .eq('is_hidden', false)
+      .order('title');
+    songs = songData || [];
+    if (!songs.length) {
+      statusBanner.textContent = 'Demo is unavailable right now.';
+      tipOnlyCard.classList.add('hidden');
+      return;
+    }
+
+    gigSession = {
+      id: 'demo',
+      gig_code: 'DEMO',
+      status: 'active',
+      performer_id: performerData.id,
+      display_name_override: null,
+    };
+
+    // Deterministic picks from whatever catalog exists, so the page looks
+    // right regardless of which songs the demo account currently holds.
+    const pick = (i) => songs[i % songs.length];
+    queueBySong = new Map([
+      [pick(3).id, 27],
+      [pick(11).id, 14],
+      [pick(6).id, 5],
+    ]);
+    demoCooldownSeed = new Map([
+      [pick(0).id, 214],
+      [pick(8).id, 95],
+      [pick(15).id, 41],
+    ]);
+    cooldownBySong = new Map(demoCooldownSeed);
+
+    cutoffState = {
+      cutoff_enabled: true,
+      is_last_call: true,
+      is_cutoff_reached: false,
+      songs_remaining_estimate: 3,
+    };
+
+    statusBanner.classList.add('hidden');
+    demoRibbon.classList.remove('hidden');
+    applyPerformerName();
+    renderLastCallUI();
+    renderSongs(songs);
+    renderQueue();
+    renderCooldown();
   }
 
   // No active gig right now — instead of the old bare "check back later"
@@ -987,7 +1088,10 @@
   setInterval(() => {
     if (cooldownBySong.size === 0) return;
     cooldownBySong.forEach((secondsRemaining, songId) => {
-      cooldownBySong.set(songId, Math.max(0, secondsRemaining - 1));
+      const next = secondsRemaining - 1;
+      // In demo mode there's no poll to refresh these, so loop each timer
+      // back to its seed instead of parking every row at 0:00.
+      cooldownBySong.set(songId, next > 0 ? next : (DEMO_MODE ? (demoCooldownSeed.get(songId) || 180) : 0));
     });
     cooldownListEl.querySelectorAll('[data-cooldown-timer]').forEach(el => {
       const remaining = cooldownBySong.get(el.dataset.cooldownTimer) || 0;
@@ -1122,6 +1226,17 @@
   // it. Re-verifies the gig session and nightly cap server-side (see
   // api/create-payment-intent.js) before ever creating a real charge.
   async function setupPaymentElement(amount) {
+    if (DEMO_MODE) {
+      // No PaymentIntent is ever created here, so no card can be charged.
+      teardownPaymentElement();
+      paymentElementWrap.classList.remove('hidden');
+      paymentElementLoading.classList.add('hidden');
+      paymentErrorEl.textContent = '';
+      document.getElementById('payment-element').innerHTML =
+        '<div class="note-hint" style="margin:0;">Card details would appear here at a real gig. This demo never asks for a card.</div>';
+      submitBtn.disabled = false;
+      return;
+    }
     if (mountedAmount === amount && stripeElements) return;
     mountedAmount = amount;
 
@@ -1275,6 +1390,29 @@
   submitBtn.addEventListener('click', async () => {
     if (selectedTip === null || !gigSession) return;
     if (selectedTip === 'custom' && !(parseFloat(customTipInput.value) >= MIN_CUSTOM_TIP)) return;
+
+    if (DEMO_MODE) {
+      // Nothing is written and nothing is charged — just show what the
+      // real flow looks like from here.
+      panel.classList.remove('open');
+      confirmationTitle.textContent = 'That\'s the idea 🎶';
+      confirmationSubtitle.textContent = isTipOnly
+        ? 'At a real gig this tip would land straight in the band\'s own account.'
+        : 'At a real gig this would pop up on the band\'s tablet, mid-song, with the chart already loaded.';
+      confirmationNote.textContent = 'Nothing was charged — this is a demo.';
+      mainEl.classList.add('hidden');
+      tipOnlyCard.classList.add('hidden');
+      confirmation.classList.remove('hidden');
+      setTimeout(() => {
+        confirmation.classList.add('hidden');
+        mainEl.classList.remove('hidden');
+        tipOnlyCard.classList.remove('hidden');
+        countdownText.textContent = '';
+        resetPanelState();
+      }, 4000);
+      countdownText.textContent = '';
+      return;
+    }
 
     // Last-second safety check: the song could have hit its cap, or gone on
     // cooldown from just being played, in the moments between opening this
