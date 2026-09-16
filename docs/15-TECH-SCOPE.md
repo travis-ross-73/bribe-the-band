@@ -183,11 +183,26 @@ Suggested replacements: "Follow Someone Else's Gig" → **"Join a Bandmate's Gig
 
 ---
 
-## Task 6 — Retire signup.html
+## Task 6 — ~~Retire signup.html~~ · RESOLVED — do not do this
 
-`/get-started` already carries a full signup form. `signup.html` is a second, different form behind a button — so a visitor types their details, clicks, and gets asked again.
+**Corrected 2026-09-16. The premise was stale, and acting on it now would delete working code.**
 
-Make `/get-started` the single signup surface with a working form. Redirect `signup.html` → `/get-started` (301) rather than deleting it, since the URL may be in existing links or emails.
+`/get-started` has no signup form. Zero form elements — no `<form>`, no `<input>`, no email or password field, no Supabase client. It is a marketing page carrying a *decorative, inert mockup* of a form (styled `div`s, not fields) plus two CTAs linking to `/signup.html`. The duplicate form the audit saw on 2026-09-13 was removed the same day by the StoryBrand marketing rewrite (`1663440`) — the audit caught the site mid-change.
+
+So the redundancy this task existed to fix no longer exists, and the direction it proposed is now backwards. **`signup.html` is the real and only signup surface**, and it carries:
+
+- the bandmate join passthrough (item 22) — same-origin-checked `next`, confirmation message built with DOM APIs rather than `innerHTML`
+- performer-initiated resend of the confirmation email
+- affiliate / referral code capture and cookie fallback
+- live handle availability validation
+
+Making `/get-started` "the single signup surface with a working form" would mean migrating all of the above into a brochure page — a risky rewrite of the live signup flow to fix a problem that no longer exists. **Don't.**
+
+**What actually remained, and is done:** the decorative form set a visual expectation the real page didn't meet — different palette, serif vs system heading, sentence-case vs uppercase labels, and no site chrome at all. `/signup` was restyled to the marketing design system on 2026-09-16 and is live. Field set, markup structure and every script-referenced id were left untouched.
+
+**What's genuinely left** belongs to Task 7: `get-started.html`'s two CTAs point at `/signup.html` rather than `/signup`, even though the `/signup` rewrite already exists in `vercel.json`. Two `href` changes, no behaviour change.
+
+**Lesson worth keeping:** this scope was written from a live-site read on one day and the site changed the same day. Re-verify a task's premise against the code before acting on it — this one would have destroyed four working features while appearing to follow the plan correctly.
 
 ---
 
@@ -276,7 +291,7 @@ Rewrite around the half that's true — **you do know it, and the chart is alrea
 
 **This week, before the gig:** 5 (bandmates see it), 2, 3, 4. Then 1 if there's room — it's the biggest and shouldn't be rushed the day before a show.
 
-**Next:** 1 (if not done), 12, 9, 8, 6, 7. Task 12 moves up because it gates the legal and marketing pages, and because the handle-collision check gets more expensive with every account created.
+**Next:** 1 (if not done), 12, 9, 8, 7. Task 12 moves up because it gates the legal and marketing pages, and because the handle-collision check gets more expensive with every account created. Task 6 is resolved and dropped from the order — see its section.
 
 **After the legal pages exist:** 10, 11.
 
