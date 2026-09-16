@@ -182,10 +182,32 @@
   // Blocks a handle from colliding with the app's own routes/files. Keep in
   // sync with the reserved-word list in 01-ARCHITECTURE-AND-DATA-MODEL.md —
   // 'signup'/'signup.html' were added to that list when this page was built.
+  //
+  // Why this matters: vercel.json ends with a catch-all rewrite
+  // `/:handle -> /request.html`, and any named route registered ABOVE it wins.
+  // So a performer holding a handle that matches a route has a crowd page that
+  // is permanently unreachable — the route answers instead. Every named path,
+  // present or planned, has to live in this list.
+  //
+  // Deliberately NOT reserved: 'demo'. It is a real performer account whose
+  // crowd page IS /demo, resolved through the catch-all by design, and it's
+  // what the marketing site's "see it live" link points at. Reserving it would
+  // be harmless today (the handle is taken, so uniqueness already blocks it)
+  // but would wrongly imply it's a route.
   const RESERVED_HANDLES = [
+    // app files and paths
     'console', 'console.html', 'viewer', 'viewer.html', 'login', 'admin',
     'api', 'request', 'request.html', 'index.html', 'manifest.json', 'www',
     'signup', 'signup.html',
+    // marketing routes that already exist in vercel.json — a handle matching
+    // any of these is unreachable today, not at some future point
+    'features', 'get-started', 'how-it-works', 'highlights',
+    // legal and marketing pages planned for Stage 3/4; reserved ahead of
+    // publication so they can't be claimed in the meantime
+    'terms', 'privacy', 'refunds', 'pricing', 'faq', 'about', 'contact',
+    'support', 'help', 'blog',
+    // infrastructure and static assets
+    'mail', 'static', 'assets', 'favicon.svg', 'robots.txt', 'sitemap.xml',
   ];
 
   const displayNameInput = document.getElementById('su-display-name');
