@@ -85,6 +85,27 @@
   .success-box p { color: var(--muted); font-size: 0.92rem; line-height: 1.5; }
   .login-link { text-align: center; margin-top: 18px; font-size: 0.85rem; color: var(--muted); }
   .login-link a { color: var(--accent); text-decoration: none; }
+  .resend-block {
+    margin-top: 18px;
+    padding-top: 16px;
+    border-top: 1px solid rgba(154, 157, 176, 0.18);
+  }
+  .resend-block p.resend-prompt { font-size: 0.85rem; margin: 0 0 10px; }
+  button.secondary {
+    background: transparent;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: 8px;
+    padding: 9px 16px;
+    font-weight: 600;
+    font-size: 0.88rem;
+    cursor: pointer;
+  }
+  button.secondary:disabled { opacity: 0.45; cursor: default; }
+  .resend-status { font-size: 0.8rem; margin-top: 9px; min-height: 1.1em; }
+  .resend-status.ok { color: var(--success); }
+  .resend-status.err { color: var(--danger); }
+  .resend-status.muted { color: var(--muted); }
   .hidden { display: none !important; }
 </style>
 </head>
@@ -125,6 +146,11 @@
     <div class="success-box">
       <div class="icon">🎉</div>
       <p id="success-message"></p>
+      <div id="resend-block" class="resend-block hidden">
+        <p class="resend-prompt">Didn't get it? Check your spam or junk folder first — that's where it usually is.</p>
+        <button type="button" id="resend-btn" class="secondary">Send the email again</button>
+        <div id="resend-status" class="resend-status muted"></div>
+      </div>
     </div>
   </section>
 </main>
@@ -157,6 +183,13 @@
   const formSection = document.getElementById('signup-form-section');
   const successSection = document.getElementById('signup-success-section');
   const successMessage = document.getElementById('success-message');
+  const resendBlock = document.getElementById('resend-block');
+  const resendBtn = document.getElementById('resend-btn');
+  const resendStatus = document.getElementById('resend-status');
+
+  // Captured at signup so the resend control knows who to re-send to. Only
+  // ever set on the "confirm email is on, no session yet" path below.
+  let pendingEmail = null;
 
   // Pre-fill a promo/referral code from a shared affiliate link, e.g.
   // signup.html?ref=SOMEBAND15 — Travis's own ask: "I will manually set
@@ -336,7 +369,72 @@
       setTimeout(() => { window.location.href = 'console.html'; }, 2500);
     } else {
       successMessage.textContent = `Almost there — check your email to confirm your account, then log into the console. Your page will be bribetheband.live/${handle}.`;
+      pendingEmail = email;
+      resendBlock.classList.remove('hidden');
     }
+  });
+
+  // "Send the email again" — the confirmation email is the only thing
+  // standing between a new performer and their console, and it can fail for
+  // reasons neither of us control (a receiving provider rejecting the
+  // message on reputation grounds, a spam folder, a typo'd address). Without
+  // this, the success screen is a dead end: no recourse for them, no signal
+  // to us. A retry also goes out over a different sending IP, which is the
+  // actual fix when a shared-pool address gets a message refused.
+  //
+  // Supabase rate-limits resends server-side; the 45s local cooldown below
+  // exists so the common case is a quiet "wait a moment" rather than a
+  // confusing provider error.
+  const RESEND_COOLDOWN_MS = 45000;
+  let resendCooldownTimer = null;
+
+  function setResendStatus(msg, kind) {
+    resendStatus.textContent = msg;
+    resendStatus.className = 'resend-status ' + (kind || 'muted');
+  }
+
+  function startResendCooldown() {
+    let remaining = Math.ceil(RESEND_COOLDOWN_MS / 1000);
+    resendBtn.disabled = true;
+    const tick = () => {
+      if (remaining <= 0) {
+        clearInterval(resendCooldownTimer);
+        resendCooldownTimer = null;
+        resendBtn.disabled = false;
+        resendBtn.textContent = 'Send the email again';
+        return;
+      }
+      resendBtn.textContent = `Send again in ${remaining}s`;
+      remaining -= 1;
+    };
+    tick();
+    resendCooldownTimer = setInterval(tick, 1000);
+  }
+
+  resendBtn.addEventListener('click', async () => {
+    if (!pendingEmail) return;
+    resendBtn.disabled = true;
+    setResendStatus('Sending…', 'muted');
+
+    const { error } = await supabase.auth.resend({ type: 'signup', email: pendingEmail });
+
+    if (error) {
+      // Supabase's own rate limiter, surfaced plainly rather than raw.
+      const tooMany = /rate|too many|seconds/i.test(error.message || '');
+      setResendStatus(
+        tooMany
+          ? 'That was a little too soon — give it a minute and try again.'
+          : `Couldn't resend: ${error.message}`,
+        'err'
+      );
+      resendBtn.disabled = false;
+      return;
+    }
+
+    // TODO: once there's a published support address, name it here — a
+    // performer whose provider refuses both attempts has no way to reach us.
+    setResendStatus(`Sent on its way to ${pendingEmail}. Give it a few minutes, and check spam again.`, 'ok');
+    startResendCooldown();
   });
 </script>
 
