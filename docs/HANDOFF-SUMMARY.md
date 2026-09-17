@@ -13,6 +13,20 @@ Full architecture, data model, and feature history are in `docs/01-ARCHITECTURE-
 Every prior session (running in Cowork/chat, not Claude Code) hit a sandbox restriction: `git push origin main` always failed with a 403 ("not in this session's authorized repository set"). Every deliverable had to be committed locally, then handed to Travis as a downloadable file for him to manually upload via GitHub's web UI. **Confirmed 2026-08-25: Claude Code has direct push access** to `travis-ross-73/bribe-the-band` (Travis provided a GitHub fine-grained PAT scoped to this repo; verified with a real test push/delete before doing anything real). Clone the repo locally (e.g. `/Users/Rossomeness/Claude/bribe-the-band`) and work from there — don't assume a clone already exists at session start, since this is a fresh Claude Code environment each time.
 
 ## Exactly where things stand right now — production is live and in real use
+
+### Most recent work — pre-gig package, 2026-09-15/16
+Driven by a live band gig on **Friday 2026-09-18**, with bandmates creating accounts the same week. Full detail in `04-DECISIONS-AND-OPEN-QUESTIONS.md`'s 2026-09-15/16 session entry and items 54–57.
+
+**Live on production:** the "Followers" → "Bandmates" rename and the rebranded bandmate join screen; per-performer statement descriptors (`BRIBEBAND* TEN CENT`); tip presets at $5/$10/$20 with a $3 floor on the paid path only; the point-of-purchase refund disclosure on the crowd page; the bandmate join passthrough; `/signup` restyled to the marketing design system; and `migration-enforce-request-limits-v1.sql`, which finally closed the $0 free-request enforcement gap open since August.
+
+**Built on staging, deliberately NOT ported** until after the gig, because each touches a gig-critical file: the seeded `/demo` crowd page (item 54), the extended reserved-handle list (item 55), and the 10MB chart upload cap (item 56).
+
+**Two things a future session should not get wrong:**
+- **`15-TECH-SCOPE.md` Task 6 is struck.** Retiring `signup.html` would delete the live signup surface — `/get-started` has no form at all. The scope was written from a live-site read on a day the site was changing.
+- **`DESCRIPTOR_MAX` in `api/create-payment-intent.js` is tied to the Stripe shortened descriptor `BRIBEBAND`.** Change one and the other must change with it, or the suffix is silently dropped and every statement loses the band name while looking fine.
+
+**Open and unowned:** there is still no support email anywhere in the product (item 57), which is the one real gap left in the payment disclosure.
+
 `bribetheband.live` is the real, live app, confirmed working at a real Travis gig on 2026-08-27 with real crowd tips and requests. Staging (a second, fully isolated copy of the whole stack) still exists and is the standing pattern for building/testing anything new before it reaches production — see `01-ARCHITECTURE-AND-DATA-MODEL.md` and `04-DECISIONS-AND-OPEN-QUESTIONS.md` for full feature-by-feature detail; `07-STAGING-ENVIRONMENT-SETUP.md` covers the staging build itself (now historical — treat it as "how staging was built," not "what's newest").
 
 **Environments (current):**

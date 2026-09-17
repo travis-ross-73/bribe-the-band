@@ -20,6 +20,8 @@ Written to be handed to a Claude Code session with access to the git repo, Verce
 
 ## Task 1 — Randomize chart object keys
 
+**Status: not started.** Deliberately held until after the 2026-09-18 gig — it rewrites the object key behind every chart, and the band reads those on stage.
+
 **PRE-GIG if time allows, otherwise first thing after.**
 
 ### The problem
@@ -94,6 +96,8 @@ Credentials: the existing dedicated Wasabi sub-user (`WASABI_ACCESS_KEY_ID` / `W
 
 ## Task 2 — Dynamic statement descriptor
 
+**Status: SHIPPED to production 2026-09-15.** Prefix is `BRIBEBAND`, not `BTB-TIP` — see the corrected section below.
+
 **PRE-GIG. Highest chargeback-reduction per hour of work on this list.**
 
 In the Stripe dashboard, set **Shortened descriptor** to `BTB-TIP` and the full statement descriptor to `BRIBETHEBAND.LIVE`. (If Stripe rejects the two as dissimilar, use `BRIBETHEBAND` as the root for both.)
@@ -121,6 +125,8 @@ The tipper remembers the band, not the platform. This is the single most common 
 
 ## Task 3 — Tip presets and minimum
 
+**Status: SHIPPED to production 2026-09-15.**
+
 **PRE-GIG.**
 
 **Corrected 2026-09-14.** There are **five** buttons, not four: `$2 / $5 / $10 / Custom / No Tip` (`request.html:429-434`). **No Tip is a real $0 free-request path that never creates a PaymentIntent at all.**
@@ -142,6 +148,8 @@ Server-side, reject amounts under $3 in `create-payment-intent.js` — client va
 ---
 
 ## Task 4 — Crowd page payment disclosure
+
+**Status: SHIPPED to production 2026-09-15**, except the success-screen support-email line — no support address exists yet (item 57).
 
 **PRE-GIG. This is the most legally protective change in the entire package.**
 
@@ -172,6 +180,8 @@ Use `BTB-TIP` in the "appears on your statement as" line, matching Task 2.
 ---
 
 ## Task 5 — "Followers" → "Bandmates"
+
+**Status: SHIPPED to production 2026-09-15.**
 
 **PRE-GIG. Bandmates are creating accounts this week — this is the week the word matters.**
 
@@ -208,6 +218,8 @@ Making `/get-started` "the single signup surface with a working form" would mean
 
 ## Task 7 — Clean URLs
 
+**Status: not started.** Also absorbs the one real leftover from struck Task 6: `/get-started`'s two CTAs point at `/signup.html` rather than the `/signup` rewrite that already exists.
+
 **Corrected 2026-09-14: only the `/signup` rewrite exists. `/login` does not.**
 
 Add `/login` → `console.html`. Update every nav link, CTA, and internal reference so no raw `.html` filename appears in the UI. Keep the old paths working as redirects.
@@ -217,6 +229,8 @@ Note the ordering constraint from Task 12: any new named path must be added abov
 ---
 
 ## Task 8 — Chart upload size cap
+
+**Status: built on staging 2026-09-16, NOT ported.** See item 56.
 
 There's currently no file size limit and no page limit on chart uploads. One 400MB scan costs storage indefinitely and produces a chart that won't load on bar wifi.
 
@@ -232,6 +246,8 @@ Multi-page charts work correctly and should stay unlimited in page count. No cha
 
 ## Task 9 — Fix `/demo`
 
+**Status: built on staging 2026-09-16, NOT ported** — held until after the gig because it touches `request.html`. See item 54.
+
 **Corrected 2026-09-14 — the original diagnosis was wrong.** `/demo` is not a broken link or a routing bug. It hits the same `/:handle` catch-all every crowd page uses, and it's correctly rendering the legitimate "Offstage — For Now" state for a real handle with no active gig. The page is working exactly as designed.
 
 **So the fix is data, not routing:** seed a demo account with a gig that stays permanently live — a real setlist, two or three songs already queued with dollar amounts, a Last Call banner, an expanded Recently Played list.
@@ -243,6 +259,8 @@ Make the tip buttons non-functional or clearly demo-only so nobody is charged. C
 ---
 
 ## Task 12 — Reserved paths and handle collisions
+
+**Status: handle half built on staging 2026-09-16, NOT ported** (item 55). Routing half intentionally deferred — a rewrite for a page that doesn't exist yet just 404s, so each route gets registered above the catch-all as its page publishes.
 
 **Not pre-gig, but it blocks Stage 3 and Stage 4, so it wants doing before either.**
 
@@ -262,6 +280,8 @@ The Terms draft §4 already claims this right — *"we may reclaim a handle that
 
 ## Task 10 — Terms acceptance at signup
 
+**Status: blocked on Stage 3 (legal pages published).**
+
 **Gated on the legal pages being published (Stage 3).** Schema first.
 
 ```sql
@@ -278,6 +298,8 @@ Add the three links to the site-wide footer at the same time, including on the c
 ---
 
 ## Task 11 — Homepage hook
+
+**Status: not started.**
 
 Copy change, but it needs implementing.
 
