@@ -2517,6 +2517,32 @@
   }
 
   // ---------------- Wasabi upload (via serverless presigned-URL function) ----------------
+
+  // 10MB per chart PDF. There was no limit at all before, so one 400MB scan
+  // would cost storage indefinitely and produce a chart that will not load on
+  // bar wifi — which is the failure that matters, since it happens mid-set.
+  // Generous by roughly an order of magnitude: a real chord chart is well
+  // under 1MB. Page count stays unlimited; multi-page charts work correctly
+  // and are a normal thing to have.
+  const MAX_CHART_BYTES = 10 * 1024 * 1024;
+
+  function formatFileSize(bytes) {
+    return bytes >= 1024 * 1024
+      ? `${(bytes / (1024 * 1024)).toFixed(1)}MB`
+      : `${Math.max(1, Math.round(bytes / 1024))}KB`;
+  }
+
+  // Says what to do, not just what failed — a size error with no remedy just
+  // leaves someone stuck holding a scan they can't use.
+  function chartTooLargeMessage(file) {
+    // A file barely over the limit rounds to "10.0MB", and "10.0MB — over the
+    // 10MB limit" reads like a bug rather than a rule. Say "just over" instead
+    // of quoting a size that looks identical to the limit.
+    const shown = formatFileSize(file.size);
+    const size = shown === formatFileSize(MAX_CHART_BYTES) ? 'just over' : `${shown} — over`;
+    return `"${file.name}" is ${size} the 10MB limit. `
+      + `Chord charts are usually well under 1MB; if this is a scan, try exporting it again at a lower resolution.`;
+  }
   async function getAccessToken() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) throw new Error('Not logged in.');
@@ -2525,6 +2551,13 @@
 
   // Uploads a PDF File object for the given song slug and returns its public chart URL.
   async function uploadPdfForSlug(file, slug) {
+    // Enforced here rather than at each call site: Add a Song, Bulk Add and
+    // Manage Songs -> replace all funnel through this function, and so will
+    // anything added later. Checked before the presigned URL is requested, so
+    // an oversized file never reaches storage.
+    if (file && file.size > MAX_CHART_BYTES) {
+      throw new Error(chartTooLargeMessage(file));
+    }
     const token = await getAccessToken();
     const res = await fetch('/api/wasabi-upload-url', {
       method: 'POST',
@@ -2740,7 +2773,18 @@
   bulkFileInput.addEventListener('change', () => {
     const files = Array.from(bulkFileInput.files || []);
     bulkError.textContent = '';
-    bulkQueue = files.map(file => {
+    const oversized = files.filter(f => f.size > MAX_CHART_BYTES);
+    const usable = files.filter(f => f.size <= MAX_CHART_BYTES);
+    if (oversized.length) {
+      // Surfaced at selection rather than mid-run: with 40 files queued, a
+      // failure partway through leaves a half-imported catalog to untangle.
+      bulkError.textContent = oversized.length === 1
+        ? chartTooLargeMessage(oversized[0])
+        : `${oversized.length} files are over the 10MB limit and were left out: `
+          + oversized.map(f => `${f.name} (${formatFileSize(f.size)})`).join(', ')
+          + '. Chord charts are usually well under 1MB; if these are scans, try exporting them again at a lower resolution.';
+    }
+    bulkQueue = usable.map(file => {
       const guess = parseFilenameGuess(file.name);
       return { file, title: guess.title, artist: guess.artist, key: '', capo: '', status: '', statusClass: '' };
     });
