@@ -5,7 +5,7 @@
 >
 > **This is the single most load-bearing document of the three.** A published, plainly-worded refund policy shown *at the moment of payment* is the standard defense when a cardholder disputes a charge. Absent one, the issuer generally sides with the cardholder — and under the current Connect setup, Bribe The Band is merchant of record and eats the loss plus a dispute fee.
 >
-> **Placeholders:** `[ENTITY]`, `[SUPPORT EMAIL]`, `[EFFECTIVE DATE]`, `[STATEMENT DESCRIPTOR]`.
+> **Placeholders:** `[ENTITY]`, `[SUPPORT EMAIL]`, `[EFFECTIVE DATE]`, `BRIBEBAND`.
 >
 > **Note:** the policy below is written for a **no-refunds-by-default** posture with narrow discretionary exceptions. `09-CONNECT-EXPRESS-SCOPE.md` deliberately deferred building refund mechanics. If a refund button gets built, Section 4 gets easier and stronger, not harder — see the implementation notes.
 
@@ -71,7 +71,7 @@ We don't collect your name or email when you tip, so these details are how we fi
 
 ## 6. Please talk to us before disputing a charge
 
-If you don't recognize a charge, it will appear on your statement as **[STATEMENT DESCRIPTOR]**.
+If you don't recognize a charge, it will appear on your statement as **BRIBEBAND**.
 
 Filing a dispute with your bank costs the performer their tip *and* a separate fee charged by the payment processor — so a $10 dispute can take $25 out of a working musician's pocket. If something went wrong, email us first. We're faster than a bank dispute and we'd like the chance to make it right.
 
@@ -104,7 +104,7 @@ We may update this policy. The version in effect when you tipped is the one that
 
 Must be visible without scrolling or tapping anything. Small text is fine; hidden behind a link is not.
 
-> **Requests aren't guaranteed.** Your tip is a thank-you to the performer — they decide what to play and may not get to every song. Tips are final and non-refundable. Appears on your statement as [STATEMENT DESCRIPTOR]. [Full policy](/refunds)
+> **Requests aren't guaranteed.** Your tip is a thank-you to the performer — they decide what to play and may not get to every song. Tips are final and non-refundable. Appears on your statement as BRIBEBAND. [Full policy](/refunds)
 
 ## B. Crowd page — the Boost button confirmation
 

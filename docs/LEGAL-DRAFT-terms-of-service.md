@@ -3,7 +3,7 @@
 > **⚠️ DRAFT FOR ATTORNEY REVIEW — DO NOT PUBLISH AS-IS.**
 > This was written by an AI assistant, not a lawyer. It is a structured starting point designed to save billable hours, not a substitute for review by a Colorado business attorney with payments-platform experience. Sections 6, 8, 9, 11 and 19–21 in particular carry real financial and liability consequences and must be reviewed.
 >
-> **Placeholders to fill before review:** `[ENTITY]`, `[ENTITY SHORT]`, `[MAILING ADDRESS]`, `[SUPPORT EMAIL]`, `[LEGAL EMAIL]`, `[DMCA AGENT NAME + EMAIL]`, `[EFFECTIVE DATE]`, `[STATEMENT DESCRIPTOR]`.
+> **Placeholders to fill before review:** `[ENTITY]`, `[ENTITY SHORT]`, `[MAILING ADDRESS]`, `[SUPPORT EMAIL]`, `[LEGAL EMAIL]`, `[DMCA AGENT NAME + EMAIL]`, `[EFFECTIVE DATE]`, `BRIBEBAND`.
 >
 > **Decisions this draft assumes** (confirm each): platform fee is 10% of the gross tip; Stripe's processing fees come out of the performer's share; tips are non-refundable by default; performers bear chargeback liability as between them and the platform; Bandmate accounts are free; governing law is Colorado.
 
@@ -105,7 +105,7 @@ We may change the Platform Fee. We will give Performers at least **30 days' noti
 
 ### 6.6 Statement descriptor
 
-Charges appear on an Audience Member's card statement as **[STATEMENT DESCRIPTOR]**.
+Charges appear on an Audience Member's card statement as **BRIBEBAND**.
 
 ## 7. Tips, Requests, and refunds
 

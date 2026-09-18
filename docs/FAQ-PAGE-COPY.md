@@ -1,6 +1,8 @@
 # FAQ Page — Copy
 
-> **Status:** ready to publish, with six answers flagged **[CONFIRM]** where I'm describing behavior I couldn't verify from outside the app. Check those against the real thing before it goes live — a wrong FAQ answer is worse than a missing one, because people plan gigs around it.
+> **Status: ready to publish.** All six original **[CONFIRM]** flags were verified against the code and closed 2026-09-16/17. One answer is now flagged **[BLOCKED ON TASK 1]** instead — the chart-storage paragraph, which must not claim "unguessable addresses" until the object keys are actually randomised.
+>
+> **Corrected along the way:** the multi-set answer described a "stop taking requests" button that does not exist in the console. Requests staying open through breaks is the deliberate design — `set_ends_at` is *when tonight's final set ends*, so Last Call is anchored to the end of the night, not to each set.
 >
 > **Placeholders:** `[SUPPORT EMAIL]`, `[PRICING URL]`, `[SIGNUP URL]`, `[TERMS URL]`, `[REFUNDS URL]`.
 >
@@ -39,7 +41,7 @@ What we recommend, and what we do ourselves: **run your tablet off your phone's 
 
 A tablet is what this was built for — the chart viewer needs the screen size, and one iPad running charts, setlist, and the request drawer is the whole setup. That's it. No second device, no laptop, no dedicated hardware.
 
-**[CONFIRM]** *Verified 2026-09-14: usable on a phone. Rewrite this paragraph as a plain statement — "it runs in a browser, so it opens on a phone or laptop too; a tablet is easier to read from mid-song, but a phone works" — and drop the flag.*
+It runs in a browser, so it opens on a phone or a laptop too. A tablet is easier to read from mid-song, but a phone works.
 
 ### Do I need to download an app?
 
@@ -47,9 +49,7 @@ No, and neither does your audience. It runs in the browser. You can add it to yo
 
 ### What about multi-set nights?
 
-Most bar gigs are three sets with breaks, and today the app handles that with a manual **stop taking requests** button — you tap it at the break, tap it again when you're back on. It works, but it's a manual step.
-
-Automatic per-set scheduling is on the list. Last Call, which closes requests as the night winds down, already works and is set-length aware.
+Requests stay open through your breaks — which is when people are actually on their phones — you just tell it what time the gig ends, and Last Call handles the rest.
 
 ### Can I add a song mid-show?
 
@@ -162,13 +162,17 @@ Yes. Title and artist is enough. It'll show on your crowd page, be requestable, 
 
 Your audience never sees them. The crowd page shows song titles and artist names only — no keys, no capo notes, no charts.
 
-Charts are visible to you and to any bandmates you've invited to a live gig. **[CONFIRM]** *Chart files are currently stored at long unguessable web addresses rather than behind a login, which means anyone who gets hold of a specific file's address could open it. We're moving to expiring signed links. Publish this paragraph as written — it's accurate and honest — or wait until signed URLs ship and replace it with the simpler version. Don't publish a stronger privacy claim than the storage supports.*
+Charts are visible to you and to any bandmates you've invited to a live gig.
+
+Being straight with you about how they're stored: chart files sit at web addresses that aren't linked from anywhere public and aren't listed anywhere, but they're not behind a login either — anyone who gets hold of a specific file's address could open it. We're moving to expiring links. Until then, treat a chart's address the way you'd treat a "anyone with the link" share link: don't pass it around.
+
+**[BLOCKED ON TASK 1]** *Do not publish this paragraph as "long unguessable addresses" — the performer folder is a UUID, but the filename is the song's title slug, so one leaked URL plus the public setlist yields the catalog. The wording above is accurate today. Once Task 1 randomises the object keys, "unguessable" becomes true and this can be simplified; once signed URLs ship it can be cut to one sentence.*
 
 ### What format do charts need to be?
 
 PDF, and that's the only real rule. Multi-page charts work fine — pages flow in order within the song, and the song flows into the next one in your set order, so the whole night is one continuous stream you swipe through.
 
-There's no page limit and no file size cap. That said, a huge scan is a slow scan on venue wifi, so keep them reasonable.
+There's no page limit. File size is capped at 10MB per chart, which is generous by roughly an order of magnitude — a normal chord chart is well under 1MB. The cap exists because a huge scan is a slow scan on venue wifi, and that's a problem you'd discover mid-song.
 
 ### Can I use this for original songs?
 
@@ -206,11 +210,9 @@ You could, but don't — you'd be passing one tablet around or logging in on sev
 
 Yes. Sign up free, build a setlist, and look at your own crowd page. The only thing you can't do without connecting Stripe is take real money.
 
-**[CONFIRM]** *A practice-gig mode with simulated tips — a full dress rehearsal before a paid night — is the obvious missing piece here. If it ships, this answer gets much stronger. Don't promise it until it exists.*
-
 ### Can I get my songs and charts back out?
 
-Yes. Email [SUPPORT EMAIL] and we'll get you your song list, setlists, request history, and every chart PDF you've uploaded. **[CONFIRM]** *This is currently a manual process on our end. Terms §18 commits to a 30-day post-termination export window — honor it manually until a self-serve export exists, and update this answer when it does.*
+Yes. Email [SUPPORT EMAIL] and we'll get you your song list, setlists, request history, and every chart PDF you've uploaded. It's a manual process on our end today — you email, a person does it — so allow a couple of days.
 
 They're your charts. We're hosting them, not holding them.
 
@@ -239,14 +241,16 @@ Email [SUPPORT EMAIL]. A real person reads it.
 
 # Implementation notes (delete before publishing)
 
-**The six [CONFIRM] flags, in priority order:**
+**The six [CONFIRM] flags — all resolved 2026-09-16/17:**
 
-1. **Chart privacy** — the highest-stakes one. The answer as drafted is honest about public-read storage. If you'd rather not say that publicly, the alternative is shipping signed URLs first, not writing a softer sentence.
-2. **Phone/laptop support** — performers will plan around this answer. Open `viewer.html` on a phone and see.
-3. **Chart file constraints** — page count, file size, multi-page behavior.
-4. **Data export** — currently manual, and the Terms already commit to it. Fine to publish; just make sure someone's actually watching [SUPPORT EMAIL].
-5. **Practice-gig mode** — drafted as a placeholder, not a promise. Delete the flagged paragraph before publishing.
-6. **Multi-set handling** — confirm the manual stop button is still the real behavior.
+1. **Chart privacy** — ✅ answered, ⚠️ **still gated.** The bucket is public-read and confirmed *not* enumerable, but filenames are the song's title slug, so the folder UUID is unguessable and the filename isn't. The answer is reworded to say exactly that. **Do not restore the "long unguessable web addresses" phrasing until Task 1 randomises the object keys** — until then it's a stronger privacy claim than the storage supports, which is independently actionable (FTC §5 / state UDAP) in a way the storage choice itself is not.
+2. **Phone/laptop support** — ✅ verified usable on a phone; now a plain statement.
+3. **Chart file constraints** — ✅ resolved by building the limit: PDF, 10MB per file, unlimited pages.
+4. **Data export** — ✅ manual, and now said plainly in the answer ("allow a couple of days") rather than implied.
+5. **Practice-gig mode** — ✅ paragraph deleted; the feature does not exist and shouldn't be promised.
+6. **Multi-set handling** — ✅ **and the drafted answer was wrong.** It described a "stop taking requests" button; there is no such control in the console. Gig controls are Start New Gig / End Gig plus Last Call, and `set_ends_at` is documented as *when tonight's final set ends* — so Last Call is anchored to the end of the night, not to each set. Requests staying open through breaks is the design, not a gap, and Travis confirmed it as the intended behaviour 2026-09-17: a pause toggle's real failure mode is forgetting to switch it back **off**, which fails silently.
+
+**Still outstanding before this page can publish:** every `[SUPPORT EMAIL]` on it (11 across the legal drafts, item 57) and the `[PRICING URL]` / `[TERMS URL]` / `[REFUNDS URL]` cross-links, which need both the pages and the routes registered above `vercel.json`'s `/:handle` catch-all.
 
 **Two answers that do real work and should not be softened in editing:**
 
