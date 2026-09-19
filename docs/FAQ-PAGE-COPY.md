@@ -35,8 +35,6 @@ What we recommend, and what we do ourselves: **run your tablet off your phone's 
 
 **What's coming:** we're building offline chart caching — your whole setlist downloaded to the tablet when you start the set, so page turns keep working whether or not the connection does. It's the feature we want most too.
 
-**Until then, the rule we'd give any performer: don't make this the only way you can read your charts at a paid gig.** Keep a backup. We'd rather tell you that than have you learn it the hard way.
-
 ### What device do I need?
 
 A tablet is what this was built for — the chart viewer needs the screen size, and one iPad running charts, setlist, and the request drawer is the whole setup. That's it. No second device, no laptop, no dedicated hardware.
@@ -254,7 +252,7 @@ Email [SUPPORT EMAIL]. A real person reads it.
 
 **Two answers that do real work and should not be softened in editing:**
 
-- **The wifi answer.** Telling a performer to keep a backup is the single most credibility-building sentence on this page. Every working musician has been burned by a venue network, and an app that pretends otherwise reads as written by someone who's never loaded in. Leave the honesty in.
+- **The wifi answer.** Travis removed the closing "keep a backup" paragraph 2026-09-18 — it read as talking a performer out of relying on the product at the exact moment they're deciding whether to. What stays is the part that does the work: the honest "you need a connection", the hotspot recommendation, and offline caching named as coming. Don't reinstate the removed paragraph, and don't soften the three that remain.
 - **The Ultimate Guitar migration estimate.** "A 40-song set is a real evening's work" loses you some signups and saves you the ones who'd have churned at song twelve anyway. Your own internal scoping doc reached the same conclusion.
 
 **Cross-links to wire up:** pricing, terms, refunds, and the demo crowd page. Fix `/demo` before linking to it from here — an FAQ that sends people to a page reading "Loading songs…" undoes the whole thing.
